@@ -73,17 +73,76 @@ const App: React.FC = () => {
           setPhase('KYC');
         }
       } else {
-        // If no user data found (e.g. deleted), force logout?
+        // Force logout if user data missing
         console.warn("User data not found for ID:", uid);
-        // Optional: handleLogout();
+        setPhase('AUTH');
       }
     } catch (e) {
       console.error("Failed to load user data:", e);
-      // Ensure we don't get stuck in loading
     }
   };
 
-  // ... (Flow Handlers) ...
+  // Flow Handlers
+  const handleAuthSuccess = async (uid: string) => {
+    setUserId(uid);
+    await loadUserData(uid);
+  };
+
+  const handleKYCSuccess = async () => {
+    if (!userId) return;
+
+    // Update profile KYC status in database
+    await databaseService.updateProfile(userId, {
+      kyc_verified: true,
+      kyc_tier: 1,
+    });
+
+    // Reload user data
+    await loadUserData(userId);
+  };
+
+  const handleLogout = async () => {
+    await authService.signOut();
+    setPhase('AUTH');
+    setUserId(null);
+    setUser({
+      id: '',
+      name: '',
+      email: '',
+      kycVerified: false,
+      walletBalance: 0,
+      virtualAccount: null,
+    });
+    setActiveLink(null);
+  };
+
+  const handleCreateLink = (amount: number, code: string) => {
+    setActiveLink({
+      amount,
+      code,
+      id: `lnk_${Date.now()}`,
+      createdAt: new Date(),
+      isUsed: false
+    });
+    // Deduct from balance for realism
+    setUser(prev => ({ ...prev, walletBalance: prev.walletBalance - amount }));
+  };
+
+  // Render Logic
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'AUTH') {
+    return <AuthForm onSuccess={handleAuthSuccess} />;
+  }
 
   if (phase === 'KYC') {
     return <KYCForm onSuccess={handleKYCSuccess} onLogout={handleLogout} />;
