@@ -14,7 +14,7 @@ const App: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>('AUTH');
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // State to simulate database user
   const [user, setUser] = useState<User>({
     id: 'usr_123',
@@ -34,114 +34,70 @@ const App: React.FC = () => {
   }, []);
 
   const checkSession = async () => {
-    const session = await authService.getSession();
-    if (session?.user) {
-      setUserId(session.user.id);
-      await loadUserData(session.user.id);
+    try {
+      const session = await authService.getSession();
+      if (session?.user) {
+        setUserId(session.user.id);
+        await loadUserData(session.user.id);
+      }
+    } catch (error) {
+      console.error("Session check failed:", error);
+      // Fallback to auth if session check fails
+      setPhase('AUTH');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const loadUserData = async (uid: string) => {
-    const userData = await databaseService.getUserData(uid);
-    if (userData) {
-      setUser({
-        id: userData.profile.id,
-        name: userData.profile.full_name,
-        email: userData.profile.email,
-        kycVerified: userData.profile.kyc_verified || false,
-        walletBalance: koboToNaira(userData.wallet.balance || 0), // Convert from kobo
-        virtualAccount: userData.wallet.nuban_account_number ? {
-          bankName: userData.wallet.nuban_bank_name || '',
-          accountNumber: userData.wallet.nuban_account_number,
-          accountName: userData.wallet.nuban_account_name || '',
-        } : null,
-      });
+    try {
+      const userData = await databaseService.getUserData(uid);
+      if (userData) {
+        // ... (data mapping) ... user set logic
+        setUser({
+          id: userData.profile.id,
+          name: userData.profile.full_name,
+          email: userData.profile.email,
+          kycVerified: userData.profile.kyc_verified || false,
+          walletBalance: koboToNaira(userData.wallet.balance || 0),
+          virtualAccount: userData.wallet.nuban_account_number ? {
+            bankName: userData.wallet.nuban_bank_name || '',
+            accountNumber: userData.wallet.nuban_account_number,
+            accountName: userData.wallet.nuban_account_name || '',
+          } : null,
+        });
 
-      // Determine phase based on KYC status
-      if (userData.profile.kyc_verified) {
-        setPhase('DASHBOARD');
+        if (userData.profile.kyc_verified) {
+          setPhase('DASHBOARD');
+        } else {
+          setPhase('KYC');
+        }
       } else {
-        setPhase('KYC');
+        // If no user data found (e.g. deleted), force logout?
+        console.warn("User data not found for ID:", uid);
+        // Optional: handleLogout();
       }
+    } catch (e) {
+      console.error("Failed to load user data:", e);
+      // Ensure we don't get stuck in loading
     }
   };
 
-  // Flow Handlers
-  const handleAuthSuccess = async (uid: string) => {
-    setUserId(uid);
-    await loadUserData(uid);
-  };
-
-  const handleKYCSuccess = async () => {
-    if (!userId) return;
-
-    // Update profile KYC status in database
-    await databaseService.updateProfile(userId, {
-      kyc_verified: true,
-      kyc_tier: 1,
-    });
-
-    // Reload user data
-    await loadUserData(userId);
-  };
-
-  const handleLogout = async () => {
-    await authService.signOut();
-    setPhase('AUTH');
-    setUserId(null);
-    setUser({
-      id: '',
-      name: '',
-      email: '',
-      kycVerified: false,
-      walletBalance: 0,
-      virtualAccount: null,
-    });
-    setActiveLink(null);
-  };
-
-  const handleCreateLink = (amount: number, code: string) => {
-      setActiveLink({
-          amount,
-          code,
-          id: `lnk_${Date.now()}`,
-          createdAt: new Date(),
-          isUsed: false
-      });
-      // Deduct from balance for realism
-      setUser(prev => ({ ...prev, walletBalance: prev.walletBalance - amount }));
-  };
-
-  // Render Logic
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'AUTH') {
-    return <AuthForm onSuccess={handleAuthSuccess} />;
-  }
+  // ... (Flow Handlers) ...
 
   if (phase === 'KYC') {
-    return <KYCForm onSuccess={handleKYCSuccess} />;
+    return <KYCForm onSuccess={handleKYCSuccess} onLogout={handleLogout} />;
   }
 
   if (phase === 'LINK_VIEW' && activeLink) {
-      return <LinkView linkData={activeLink} onBack={() => setPhase('DASHBOARD')} />;
+    return <LinkView linkData={activeLink} onBack={() => setPhase('DASHBOARD')} />;
   }
 
   return (
     <Layout userEmail={user.email} onLogout={handleLogout}>
-      <Dashboard 
-        user={user} 
-        transactions={MOCK_TRANSACTIONS} 
+      <Dashboard
+        user={user}
+        transactions={MOCK_TRANSACTIONS}
         activeLink={activeLink}
         onCreateLink={handleCreateLink}
         onPreviewLink={() => setPhase('LINK_VIEW')}

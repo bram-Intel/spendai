@@ -4,9 +4,10 @@ import { supabase } from '../lib/supabase';
 
 interface KYCFormProps {
     onSuccess: () => void;
+    onLogout: () => void;
 }
 
-export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess }) => {
+export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess, onLogout }) => {
     const [bvn, setBvn] = useState('');
     const [dob, setDob] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
@@ -116,9 +117,14 @@ export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess }) => {
                         </button>
                     </form>
 
-                    <div className="mt-8 flex justify-center items-center gap-2 text-slate-400 opacity-60">
-                        <Lock size={12} />
-                        <span className="text-[10px] uppercase font-bold tracking-wider">256-Bit SSL Secured</span>
+                    <div className="mt-8 flex flex-col items-center gap-4">
+                        <div className="flex justify-center items-center gap-2 text-slate-400 opacity-60">
+                            <Lock size={12} />
+                            <span className="text-[10px] uppercase font-bold tracking-wider">256-Bit SSL Secured</span>
+                        </div>
+                        <button onClick={onLogout} className="text-slate-400 text-xs hover:text-slate-600 underline">
+                            Log Out
+                        </button>
                     </div>
                 </div>
             </div>
