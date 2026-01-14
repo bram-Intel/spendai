@@ -42,7 +42,6 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Session check failed:", error);
-      // Fallback to auth if session check fails
       setPhase('AUTH');
     } finally {
       setIsLoading(false);
@@ -53,7 +52,6 @@ const App: React.FC = () => {
     try {
       const userData = await databaseService.getUserData(uid);
       if (userData) {
-        // ... (data mapping) ... user set logic
         setUser({
           id: userData.profile.id,
           name: userData.profile.full_name,
@@ -73,7 +71,6 @@ const App: React.FC = () => {
           setPhase('KYC');
         }
       } else {
-        // Force logout if user data missing
         console.warn("User data not found for ID:", uid);
         setPhase('AUTH');
       }
@@ -82,7 +79,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Flow Handlers
   const handleAuthSuccess = async (uid: string) => {
     setUserId(uid);
     await loadUserData(uid);
@@ -90,14 +86,10 @@ const App: React.FC = () => {
 
   const handleKYCSuccess = async () => {
     if (!userId) return;
-
-    // Update profile KYC status in database
     await databaseService.updateProfile(userId, {
       kyc_verified: true,
       kyc_tier: 1,
     });
-
-    // Reload user data
     await loadUserData(userId);
   };
 
@@ -124,44 +116,44 @@ const App: React.FC = () => {
       createdAt: new Date(),
       isUsed: false
     });
-    // Deduct from balance for realism
     setUser(prev => ({ ...prev, walletBalance: prev.walletBalance - amount }));
   };
 
   // Render Logic
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-yellow-100">
-      <div className="text-center">
-        <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-slate-600 font-bold">LOADING V2 (DEBUG)...</p>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-yellow-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 font-bold">LOADING V2 (DEBUG)...</p>
+        </div>
       </div>
-    </div>
+    );
+  }
+
+  if (phase === 'AUTH') {
+    return <AuthForm onSuccess={handleAuthSuccess} />;
+  }
+
+  if (phase === 'KYC') {
+    return <KYCForm onSuccess={handleKYCSuccess} onLogout={handleLogout} />;
+  }
+
+  if (phase === 'LINK_VIEW' && activeLink) {
+    return <LinkView linkData={activeLink} onBack={() => setPhase('DASHBOARD')} />;
+  }
+
+  return (
+    <Layout userEmail={user.email} onLogout={handleLogout}>
+      <Dashboard
+        user={user}
+        transactions={MOCK_TRANSACTIONS}
+        activeLink={activeLink}
+        onCreateLink={handleCreateLink}
+        onPreviewLink={() => setPhase('LINK_VIEW')}
+      />
+    </Layout>
   );
-}
-
-if (phase === 'AUTH') {
-  return <AuthForm onSuccess={handleAuthSuccess} />;
-}
-
-if (phase === 'KYC') {
-  return <KYCForm onSuccess={handleKYCSuccess} onLogout={handleLogout} />;
-}
-
-if (phase === 'LINK_VIEW' && activeLink) {
-  return <LinkView linkData={activeLink} onBack={() => setPhase('DASHBOARD')} />;
-}
-
-return (
-  <Layout userEmail={user.email} onLogout={handleLogout}>
-    <Dashboard
-      user={user}
-      transactions={MOCK_TRANSACTIONS}
-      activeLink={activeLink}
-      onCreateLink={handleCreateLink}
-      onPreviewLink={() => setPhase('LINK_VIEW')}
-    />
-  </Layout>
-);
 };
 
 export default App;
