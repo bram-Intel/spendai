@@ -129,40 +129,39 @@ const App: React.FC = () => {
   };
 
   // Render Logic
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'AUTH') {
-    return <AuthForm onSuccess={handleAuthSuccess} />;
-  }
-
-  if (phase === 'KYC') {
-    return <KYCForm onSuccess={handleKYCSuccess} onLogout={handleLogout} />;
-  }
-
-  if (phase === 'LINK_VIEW' && activeLink) {
-    return <LinkView linkData={activeLink} onBack={() => setPhase('DASHBOARD')} />;
-  }
-
   return (
-    <Layout userEmail={user.email} onLogout={handleLogout}>
-      <Dashboard
-        user={user}
-        transactions={MOCK_TRANSACTIONS}
-        activeLink={activeLink}
-        onCreateLink={handleCreateLink}
-        onPreviewLink={() => setPhase('LINK_VIEW')}
-      />
-    </Layout>
+    <div className="min-h-screen flex items-center justify-center bg-yellow-100">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-slate-600 font-bold">LOADING V2 (DEBUG)...</p>
+      </div>
+    </div>
   );
+}
+
+if (phase === 'AUTH') {
+  return <AuthForm onSuccess={handleAuthSuccess} />;
+}
+
+if (phase === 'KYC') {
+  return <KYCForm onSuccess={handleKYCSuccess} onLogout={handleLogout} />;
+}
+
+if (phase === 'LINK_VIEW' && activeLink) {
+  return <LinkView linkData={activeLink} onBack={() => setPhase('DASHBOARD')} />;
+}
+
+return (
+  <Layout userEmail={user.email} onLogout={handleLogout}>
+    <Dashboard
+      user={user}
+      transactions={MOCK_TRANSACTIONS}
+      activeLink={activeLink}
+      onCreateLink={handleCreateLink}
+      onPreviewLink={() => setPhase('LINK_VIEW')}
+    />
+  </Layout>
+);
 };
 
 export default App;
