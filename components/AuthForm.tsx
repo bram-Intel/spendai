@@ -13,6 +13,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onSuccess }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isSignUp, setIsSignUp] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [checkEmail, setCheckEmail] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,7 +34,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onSuccess }) => {
                 return;
             }
 
-            if (result.user) {
+            if (isSignUp) {
+                setCheckEmail(true);
+                setIsLoading(false);
+            } else if (result.user) {
                 onSuccess(result.user.id);
             }
         } catch (err) {
