@@ -56,10 +56,13 @@ Deno.serve(async (req: Request) => {
 
     // Call Paystack API to verify BVN
     const paystackSecretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
+    console.log('Paystack key exists:', !!paystackSecretKey);
+    console.log('Paystack key prefix:', paystackSecretKey?.substring(0, 8));
+    
     if (!paystackSecretKey) {
       console.error('PAYSTACK_SECRET_KEY not configured');
       return new Response(
-        JSON.stringify({ error: 'Server configuration error' }),
+        JSON.stringify({ error: 'Server configuration error - PAYSTACK_SECRET_KEY not set' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

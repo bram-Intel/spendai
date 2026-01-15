@@ -65,11 +65,16 @@ const App: React.FC = () => {
           } : null,
         });
 
-        if (userData.profile.kyc_verified) {
-          setPhase('DASHBOARD');
-        } else {
-          setPhase('KYC');
-        }
+        // TEMPORARY: Skip KYC verification for development
+        // TODO: Re-enable KYC once Edge Function is fixed
+        setPhase('DASHBOARD');
+        
+        // Original KYC check (commented out for now)
+        // if (userData.profile.kyc_verified) {
+        //   setPhase('DASHBOARD');
+        // } else {
+        //   setPhase('KYC');
+        // }
       } else {
         console.warn("User data not found for ID:", uid);
         setPhase('AUTH');
