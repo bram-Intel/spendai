@@ -45,18 +45,40 @@ serve(async (req) => {
             throw new Error("Server configuration error: PAYSTACK_SECRET_KEY not set")
         }
 
-        const paystackResponse = await fetch(`https://api.paystack.co/bank/resolve_bvn/${bvn}`, {
-            method: 'GET',
-            headers: {
-                Authorization: `Bearer ${paystackSecret}`,
-            },
-        })
+        // In test mode, Paystack doesn't support BVN verification
+        // So we bypass the API call and simulate success for any valid 11-digit BVN
+        const isTestMode = paystackSecret.startsWith('sk_test_')
 
-        const paystackData = await paystackResponse.json()
+        let paystackData: any = {}
 
-        if (!paystackResponse.ok || !paystackData.status) {
-            console.error('Paystack error:', paystackData)
-            throw new Error(paystackData.message || 'Verification failed')
+        if (isTestMode) {
+            // Simulate successful BVN verification in test mode
+            console.log('Test mode: Bypassing Paystack BVN verification')
+            paystackData = {
+                status: true,
+                message: 'BVN verified (test mode)',
+                data: {
+                    first_name: 'Test',
+                    last_name: 'User',
+                    dob: dob,
+                    bvn: bvn
+                }
+            }
+        } else {
+            // Production mode: Call actual Paystack API
+            const paystackResponse = await fetch(`https://api.paystack.co/bank/resolve_bvn/${bvn}`, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${paystackSecret}`,
+                },
+            })
+
+            paystackData = await paystackResponse.json()
+
+            if (!paystackResponse.ok || !paystackData.status) {
+                console.error('Paystack error:', paystackData)
+                throw new Error(paystackData.message || 'Verification failed')
+            }
         }
 
         // If verification successful, update the user's profile
