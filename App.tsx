@@ -40,9 +40,11 @@ const App: React.FC = () => {
     if (path.startsWith('/link/')) {
       const code = path.split('/').pop();
       if (code && code.length === 8) {
+        console.log("Detecting link from URL:", code);
         try {
           const link = await secureLinksService.getLinkByCode(code);
           if (link) {
+            console.log("Link loaded:", link.id);
             setActiveLink(link);
             setPhase('LINK_VIEW');
           }

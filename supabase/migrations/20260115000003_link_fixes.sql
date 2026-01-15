@@ -1,6 +1,19 @@
--- Migration: Rejection logic and public link fetching
-
 -- 1. Function to reject a payment request (refunds creator)
+ALTER TABLE public.secure_links REPLICA IDENTITY FULL;
+
+-- Ensure table is in publication
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' 
+        AND schemaname = 'public' 
+        AND tablename = 'secure_links'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.secure_links;
+    END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.reject_payment_request(p_link_id UUID)
 RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
