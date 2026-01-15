@@ -20,8 +20,9 @@ Deno.serve(async (req: Request) => {
     // Get the authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('Missing authorization header');
       return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
+        JSON.stringify({ error: 'Missing authorization header found in request' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -38,8 +39,9 @@ Deno.serve(async (req: Request) => {
     // Get the authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
+      console.error('Auth error:', userError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Unauthorized: User validation failed', details: userError?.message }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -97,9 +99,9 @@ Deno.serve(async (req: Request) => {
     // Build context for Gemini
     const transactionSummary = transactions && transactions.length > 0
       ? transactions.map(tx => {
-          const amountNaira = tx.amount / 100;
-          return `- ${tx.type === 'credit' ? '+' : '-'}₦${Math.abs(amountNaira).toFixed(2)} (${tx.category || 'Other'}): ${tx.description || 'No description'}`;
-        }).join('\n')
+        const amountNaira = tx.amount / 100;
+        return `- ${tx.type === 'credit' ? '+' : '-'}₦${Math.abs(amountNaira).toFixed(2)} (${tx.category || 'Other'}): ${tx.description || 'No description'}`;
+      }).join('\n')
       : 'No recent transactions';
 
     const systemPrompt = `You are a helpful financial advisor for Spend.AI, a Nigerian fintech app. 
