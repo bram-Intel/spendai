@@ -138,7 +138,7 @@ User's Question: ${prompt}`;
             }]
           }],
           tools: [{
-            google_search_retrieval: {}
+            google_search: {}
           }],
           generationConfig: {
             temperature: 0.7,
