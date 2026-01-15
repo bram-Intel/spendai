@@ -27,6 +27,27 @@ export const secureLinksService = {
   },
 
   /**
+   * Fetch a link by its unique 8-char code (Public)
+   */
+  async getLinkByCode(code: string): Promise<SecureLink | null> {
+    const { data, error } = await (supabase as any).rpc('get_link_by_code', {
+      p_link_code: code.toUpperCase()
+    });
+
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      link_code: data.link_code,
+      amount: data.amount / 100,
+      status: data.status,
+      description: data.description,
+      createdAt: new Date().toISOString()
+    };
+  },
+
+  /**
    * Submit a payment request (Recipient/Brother uses this)
    */
   async submitRequest(linkCode: string, passcode: string, amount: number, accountNumber: string, bankName: string): Promise<void> {
@@ -48,6 +69,17 @@ export const secureLinksService = {
     const { error } = await (supabase as any).rpc('approve_payment_request', {
       p_link_id: linkId,
       p_pin: pin
+    });
+
+    if (error) throw new Error(error.message);
+  },
+
+  /**
+   * Decline/Reject a pending request
+   */
+  async rejectRequest(linkId: string): Promise<void> {
+    const { error } = await (supabase as any).rpc('reject_payment_request', {
+      p_link_id: linkId
     });
 
     if (error) throw new Error(error.message);

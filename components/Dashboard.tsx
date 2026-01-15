@@ -96,6 +96,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
         }
     };
 
+    const handleDecline = async (linkId: string) => {
+        if (!confirm('Are you sure you want to decline this request? The funds will be returned to your balance.')) return;
+        try {
+            await secureLinksService.rejectRequest(linkId);
+            fetchPending();
+            // Refresh balance
+            window.location.reload();
+        } catch (err: any) {
+            alert(err.message || 'Decline failed.');
+        }
+    };
+
     const handleSendMessage = async () => {
         if (!inputMessage.trim()) return;
 
@@ -279,7 +291,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                                         >
                                             Approve
                                         </button>
-                                        <button className="px-4 bg-slate-200 text-slate-600 py-3 rounded-xl text-sm font-bold hover:bg-red-50 hover:text-red-600 transition-all">
+                                        <button
+                                            onClick={() => handleDecline(link.id)}
+                                            className="px-4 bg-slate-200 text-slate-600 py-3 rounded-xl text-sm font-bold hover:bg-red-50 hover:text-red-600 transition-all"
+                                        >
                                             Decline
                                         </button>
                                     </div>

@@ -8,6 +8,7 @@ import { AppPhase, User, SecureLink, Transaction } from './types';
 import { MOCK_TRANSACTIONS, MOCK_VIRTUAL_ACCOUNT } from './constants';
 import { authService } from './services/authService';
 import { databaseService } from './services/databaseService';
+import { secureLinksService } from './services/secureLinksService';
 import { koboToNaira } from './lib/currency';
 
 const App: React.FC = () => {
@@ -28,10 +29,29 @@ const App: React.FC = () => {
   // State for Secure Link
   const [activeLink, setActiveLink] = useState<SecureLink | null>(null);
 
-  // Check for existing session on mount
+  // Check for existing session and URL links on mount
   useEffect(() => {
     checkSession();
+    checkUrlLink();
   }, []);
+
+  const checkUrlLink = async () => {
+    const path = window.location.pathname;
+    if (path.startsWith('/link/')) {
+      const code = path.split('/').pop();
+      if (code && code.length === 8) {
+        try {
+          const link = await secureLinksService.getLinkByCode(code);
+          if (link) {
+            setActiveLink(link);
+            setPhase('LINK_VIEW');
+          }
+        } catch (err) {
+          console.error("Failed to load link from URL:", err);
+        }
+      }
+    }
+  };
 
   const checkSession = async () => {
     try {
