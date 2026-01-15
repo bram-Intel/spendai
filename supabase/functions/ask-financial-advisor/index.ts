@@ -122,9 +122,18 @@ Guidelines:
 
 User's Question: ${prompt}`;
 
+    // Debug: List models if we're having trouble
+    try {
+      const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+      const listData = await listResp.json();
+      console.log('DEBUG: Available models:', listData.models?.map((m: any) => m.name));
+    } catch (e) {
+      console.error('DEBUG: Failed to list models:', e);
+    }
+
     // Call Gemini API
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: {
