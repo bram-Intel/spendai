@@ -55,6 +55,27 @@ const { data, error } = await supabase.functions.invoke('verify-identity', {
    - Value: `sk_test_d0d53b3fbc46a0c904c8df19286801ae3d60e5fc`
 4. Restart the Edge Function (it will pick up the new secret)
 
+## Issue 4: Paystack Test API BVN Verification
+
+**Problem:** Paystack test API doesn't support BVN verification endpoint, causing Edge Function to fail.
+
+**Solution:**
+
+The Edge Function now automatically detects test mode and bypasses the Paystack API:
+
+- **Test Mode:** If `PAYSTACK_SECRET_KEY` starts with `sk_test_`, the function returns mock BVN data for any valid 11-digit BVN
+- **Production Mode:** If using `sk_live_` key, the function calls the actual Paystack API
+
+**Testing in Test Mode:**
+- Enter any 11-digit BVN (e.g., `12345678901`)
+- The function will accept it and return mock user data
+- Your profile will be marked as KYC verified
+
+**Production:**
+- Use real Paystack live keys
+- Enter actual BVN numbers
+- The function will call Paystack's real API for verification
+
 ## Quick Fix Checklist
 
 - [ ] Set Site URL in Supabase Auth settings
@@ -69,5 +90,8 @@ const { data, error } = await supabase.functions.invoke('verify-identity', {
 1. Clear browser cache and cookies
 2. Sign up with a new email
 3. If email confirmation is disabled, you should go straight to KYC
-4. Enter test BVN: `22123456789`
-5. Should successfully verify and redirect to dashboard
+4. Enter any 11-digit BVN (e.g., `12345678901`) - test mode will accept it
+5. Enter any date of birth
+6. Should successfully verify and redirect to dashboard
+
+**Note:** In test mode, the Edge Function bypasses Paystack API and returns mock data, so any 11-digit BVN will work.

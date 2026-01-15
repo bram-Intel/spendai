@@ -15,9 +15,13 @@ Phase 2 implements identity verification using Paystack's BVN (Bank Verification
 **Flow:**
 1. Frontend sends BVN to Edge Function
 2. Edge Function authenticates the user
-3. Edge Function calls Paystack API to verify BVN
-4. If valid, updates `profiles.kyc_verified = true`
-5. Returns success/failure to frontend
+3. **Test Mode:** If using test key (`sk_test_`), returns mock BVN data
+4. **Production Mode:** If using live key (`sk_live_`), calls Paystack API to verify BVN
+5. If valid, updates `profiles.kyc_verified = true`
+6. Returns success/failure to frontend
+
+**Test Mode Bypass:**
+The Edge Function automatically detects test mode by checking if the Paystack secret key starts with `sk_test_`. In test mode, it bypasses the Paystack API (which doesn't support BVN verification in test environment) and returns mock data for any valid 11-digit BVN.
 
 **Environment Variables Required:**
 - `PAYSTACK_SECRET_KEY` - Your Paystack secret key (configured in Supabase dashboard)
@@ -51,11 +55,11 @@ You need to add the Paystack secret key to your Supabase project:
 1. Start your dev server: `npm run dev`
 2. Sign up for a new account
 3. You'll be redirected to the KYC form
-4. Enter a valid BVN (11 digits)
-5. Enter your date of birth
+4. Enter any 11-digit BVN (e.g., `12345678901`) - test mode accepts any valid format
+5. Enter any date of birth
 6. Click "Verify Identity"
 
-**Note:** For testing, you can use Paystack's test BVN: `22123456789`
+**Note:** In test mode, the Edge Function bypasses Paystack API and accepts any 11-digit BVN. In production with live keys, it will call the actual Paystack API for real verification.
 
 ## Paystack BVN API
 
@@ -65,7 +69,9 @@ You need to add the Paystack secret key to your Supabase project:
 - `Authorization: Bearer YOUR_SECRET_KEY`
 - `Content-Type: application/json`
 
-**Response (Success):**
+**Important:** Paystack's test API (`sk_test_` keys) does not support BVN verification. The Edge Function automatically detects test mode and returns mock data instead of calling the API.
+
+**Response (Success - Production Mode):**
 ```json
 {
   "status": true,
@@ -75,6 +81,20 @@ You need to add the Paystack secret key to your Supabase project:
     "last_name": "Doe",
     "phone": "08012345678",
     "bvn": "22123456789"
+  }
+}
+```
+
+**Response (Test Mode):**
+```json
+{
+  "status": true,
+  "message": "BVN resolved (test mode)",
+  "data": {
+    "first_name": "Test",
+    "last_name": "User",
+    "phone": "08012345678",
+    "bvn": "12345678901"
   }
 }
 ```
@@ -123,7 +143,8 @@ After Phase 2 is complete, Phase 3 will:
 - [ ] Edge Function deployed successfully
 - [ ] Paystack secret key configured in Supabase
 - [ ] User can sign up and reach KYC form
-- [ ] BVN verification works with test BVN
+- [ ] BVN verification works with any 11-digit BVN in test mode
 - [ ] Profile is updated after successful verification
 - [ ] User is redirected to dashboard after KYC
-- [ ] Error messages display correctly for invalid BVN
+- [ ] Error messages display correctly for invalid BVN format
+- [ ] Test mode bypass is working (check Edge Function logs in Supabase)
