@@ -59,10 +59,15 @@ const App: React.FC = () => {
       if (session?.user) {
         setUserId(session.user.id);
         await loadUserData(session.user.id);
+      } else {
+        // Only redirect to AUTH if we aren't viewing a link
+        const isViewingLink = window.location.pathname.startsWith('/link/');
+        if (!isViewingLink) setPhase('AUTH');
       }
     } catch (error) {
       console.error("Session check failed:", error);
-      setPhase('AUTH');
+      const isViewingLink = window.location.pathname.startsWith('/link/');
+      if (!isViewingLink) setPhase('AUTH');
     } finally {
       setIsLoading(false);
     }
@@ -171,6 +176,7 @@ const App: React.FC = () => {
         activeLink={activeLink}
         onCreateLink={handleCreateLink}
         onPreviewLink={() => setPhase('LINK_VIEW')}
+        onRefresh={() => userId && loadUserData(userId)}
       />
     </Layout>
   );

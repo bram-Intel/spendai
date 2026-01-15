@@ -11,9 +11,10 @@ interface DashboardProps {
     activeLink: SecureLink | null;
     onCreateLink: (link: SecureLink) => void;
     onPreviewLink: () => void;
+    onRefresh: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, activeLink, onCreateLink, onPreviewLink }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, activeLink, onCreateLink, onPreviewLink, onRefresh }) => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
         {
             role: 'model',
@@ -87,8 +88,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
             setPin('');
             setSelectedLinkId(null);
             fetchPending();
-            // Refresh balance
-            window.location.reload();
+            onRefresh();
         } catch (err: any) {
             alert(err.message || 'Approval failed. Check your PIN.');
         } finally {
@@ -101,8 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
         try {
             await secureLinksService.rejectRequest(linkId);
             fetchPending();
-            // Refresh balance
-            window.location.reload();
+            onRefresh();
         } catch (err: any) {
             alert(err.message || 'Decline failed.');
         }

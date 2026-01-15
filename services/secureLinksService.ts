@@ -41,6 +41,8 @@ export const secureLinksService = {
       id: data.id,
       link_code: data.link_code,
       amount: data.amount / 100,
+      requested_amount: data.requested_amount ? data.requested_amount / 100 : undefined,
+      target_bank_name: data.target_bank_name,
       status: data.status,
       description: data.description,
       createdAt: new Date().toISOString()

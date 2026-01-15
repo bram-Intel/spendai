@@ -44,7 +44,7 @@ BEGIN
     SELECT * INTO v_link 
     FROM public.secure_links 
     WHERE link_code = UPPER(p_link_code) 
-    AND status IN ('active', 'pending_approval')
+    AND status IN ('active', 'pending_approval', 'approved', 'rejected')
     LIMIT 1;
 
     IF v_link IS NULL THEN
@@ -55,6 +55,8 @@ BEGIN
         'id', v_link.id,
         'link_code', v_link.link_code,
         'amount', v_link.amount,
+        'requested_amount', v_link.requested_amount,
+        'target_bank_name', v_link.target_bank_name,
         'status', v_link.status,
         'description', v_link.description
     );

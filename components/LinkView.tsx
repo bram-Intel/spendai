@@ -40,6 +40,12 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
 
     // Realtime Subscription
     useEffect(() => {
+        // If link is already approved/rejected, show success immediately
+        if (linkData.status === 'approved' || linkData.status === 'rejected') {
+            setStep('SUCCESS');
+            return;
+        }
+
         if (step !== 'WAITING') return;
 
         const channel = (supabase as any)
@@ -54,7 +60,7 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
                 },
                 (payload: any) => {
                     console.log('Link updated:', payload);
-                    if (payload.new.status === 'approved') {
+                    if (payload.new.status === 'approved' || payload.new.status === 'rejected') {
                         setStep('SUCCESS');
                     }
                 }
@@ -64,7 +70,7 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
         return () => {
             (supabase as any).removeChannel(channel);
         };
-    }, [step, linkData.id]);
+    }, [step, linkData.id, linkData.status]);
 
     const handleVerify = (e: React.FormEvent) => {
         e.preventDefault();
