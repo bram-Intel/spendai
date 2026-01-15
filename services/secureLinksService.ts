@@ -1,25 +1,17 @@
 import { supabase } from '../lib/supabase';
-
-export interface SecureLink {
-  id: string;
-  link_code: string;
-  amount: number;
-  description?: string;
-  status: 'active' | 'claimed' | 'expired' | 'cancelled';
-  created_at: string;
-  expires_at: string;
-  claimed_at?: string;
-}
+import { SecureLink } from '../types';
 
 export const secureLinksService = {
   /**
    * Create a new payment link
    * @param amount Amount in kobo (e.g., 100000 = ₦1,000)
+   * @param passcode The 4-digit passcode
    * @param description Optional description
    */
-  async createLink(amount: number, description?: string): Promise<SecureLink> {
-    const { data, error } = await supabase.rpc('create_payment_link', {
+  async createLink(amount: number, passcode: string, description?: string): Promise<SecureLink> {
+    const { data, error } = await (supabase as any).rpc('create_payment_link', {
       p_amount: amount,
+      p_passcode: passcode,
       p_description: description || null,
     });
 
@@ -32,14 +24,15 @@ export const secureLinksService = {
       throw new Error('No data returned from create_payment_link');
     }
 
+    const response = data as any;
+
     return {
-      id: data.link_id,
-      link_code: data.link_code,
-      amount: data.amount,
+      id: response.link_id,
+      link_code: response.link_code,
+      amount: response.amount / 100, // Convert kobo to naira for frontend
       description: description,
-      status: data.status,
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      status: response.status,
+      createdAt: new Date().toISOString()
     };
   },
 
@@ -49,7 +42,7 @@ export const secureLinksService = {
    * @param passcode The 4-digit passcode
    */
   async claimLink(linkCode: string, passcode: string): Promise<{ success: boolean; amount: number; message: string }> {
-    const { data, error } = await supabase.rpc('claim_payment_link', {
+    const { data, error } = await (supabase as any).rpc('claim_payment_link', {
       p_link_code: linkCode.toUpperCase(),
       p_passcode: passcode,
     });
@@ -63,14 +56,18 @@ export const secureLinksService = {
       throw new Error('No data returned from claim_payment_link');
     }
 
-    return data;
+    const result = data as any;
+    return {
+      ...result,
+      amount: result.amount / 100 // Convert kobo to naira
+    };
   },
 
   /**
    * Get user's created links
    */
   async getUserLinks(): Promise<SecureLink[]> {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('secure_links')
       .select('*')
       .order('created_at', { ascending: false });
@@ -80,7 +77,15 @@ export const secureLinksService = {
       throw new Error('Failed to fetch payment links');
     }
 
-    return data || [];
+    return (data || []).map((link: any) => ({
+      id: link.id,
+      link_code: link.link_code,
+      amount: link.amount / 100,
+      description: link.description,
+      status: link.status,
+      createdAt: link.created_at,
+      expires_at: link.expires_at
+    }));
   },
 
   /**
@@ -88,7 +93,7 @@ export const secureLinksService = {
    * @param linkId The link ID
    */
   async cancelLink(linkId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('secure_links')
       .update({ status: 'cancelled' })
       .eq('id', linkId)

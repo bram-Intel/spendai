@@ -56,6 +56,7 @@ CREATE POLICY "Users can update their own links"
 -- Function to create a payment link
 CREATE OR REPLACE FUNCTION public.create_payment_link(
     p_amount BIGINT,
+    p_passcode TEXT,
     p_description TEXT DEFAULT NULL
 )
 RETURNS JSON
@@ -87,10 +88,8 @@ BEGIN
     -- Generate unique 8-character link code
     v_link_code := UPPER(SUBSTRING(MD5(RANDOM()::TEXT || CLOCK_TIMESTAMP()::TEXT) FROM 1 FOR 8));
     
-    -- Generate a random 4-digit passcode and hash it
-    -- In production, the passcode should be provided by the user
-    -- For now, we'll generate a simple hash
-    v_passcode_hash := MD5(v_link_code || 'salt');
+    -- Hash the provided 4-digit passcode
+    v_passcode_hash := MD5(p_passcode || 'salt');
 
     -- Deduct amount from wallet
     UPDATE public.wallets
@@ -172,7 +171,7 @@ BEGIN
     -- Get link details
     SELECT * INTO v_link
     FROM public.secure_links
-    WHERE link_code = p_link_code
+    WHERE link_code = UPPER(p_link_code)
     AND status = 'active'
     AND expires_at > NOW()
     FOR UPDATE;
@@ -181,8 +180,8 @@ BEGIN
         RAISE EXCEPTION 'Link not found, already claimed, or expired';
     END IF;
 
-    -- Verify passcode (simple hash check - in production use proper hashing)
-    v_passcode_hash := MD5(p_link_code || 'salt');
+    -- Verify passcode
+    v_passcode_hash := MD5(p_passcode || 'salt');
     
     IF v_link.passcode_hash != v_passcode_hash THEN
         RAISE EXCEPTION 'Invalid passcode';

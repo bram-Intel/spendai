@@ -29,8 +29,9 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
         // We call RPC `claim_payment_link`.
 
         try {
-            const { data, error } = await supabase.rpc('claim_payment_link', {
-                link_code: passcode // The user enters the code to claim
+            const { data, error } = await (supabase as any).rpc('claim_payment_link', {
+                p_link_code: linkData.link_code, // Updated to link_code from types.ts
+                p_passcode: passcode      // The 4-digit secret
             });
 
             if (error) {

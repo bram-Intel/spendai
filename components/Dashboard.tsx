@@ -41,9 +41,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
         if (!linkAmount || !linkCode) return;
 
         try {
-            const { data, error } = await supabase.rpc('create_payment_link', {
-                amount: Number(linkAmount) * 100, // Convert to kobo
-                description: 'Secure Link Transfer' // Default description
+            const { data, error } = await (supabase as any).rpc('create_payment_link', {
+                p_amount: Number(linkAmount) * 100, // Convert to kobo
+                p_passcode: linkCode, // This is the 4-digit passcode
+                p_description: 'Secure Link Transfer'
             });
 
             if (error) {
@@ -52,7 +53,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                 return;
             }
 
-            onCreateLink(Number(linkAmount), (data as any).link_code); // Update parent state if needed
+            const responseData = data as any;
+            onCreateLink(Number(linkAmount), responseData.link_code); // Update parent state if needed
             setLinkCode('');
             setLinkAmount('');
             // Maybe show success toast

@@ -32,10 +32,13 @@ export interface ChatMessage {
 }
 
 export interface SecureLink {
-  amount: number;
-  code: string;
   id: string;
-  createdAt: Date;
+  link_code: string;
+  amount: number;
+  description?: string;
+  status: 'active' | 'claimed' | 'expired' | 'cancelled';
+  createdAt: string;
+  expires_at?: string;
 }
 
 // --- Database Schema Types (For Phase 1 & 2) ---
