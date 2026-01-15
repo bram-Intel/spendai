@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
     // Fetch user's wallet and recent transactions
     const { data: userData, error: dataError } = await supabase
       .from('wallets')
-      .select('balance')
+      .select('id, balance')
       .eq('user_id', user.id)
       .single();
 
