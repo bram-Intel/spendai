@@ -65,7 +65,7 @@ You need to add the Gemini API key to your Supabase Edge Functions:
 2. Navigate to **Project Settings** → **Edge Functions** → **Manage secrets**
 3. Add a new secret:
    - Name: `GEMINI_API_KEY`
-   - Value: `AIzaSyC5T3gLVQw2f9j4xQFb0RyWKl-jqwtfX7c`
+   - Value: `YOUR_GEMINI_API_KEY_HERE`
 4. Click **Save**
 
 ### Step 2: Verify Migration Applied
