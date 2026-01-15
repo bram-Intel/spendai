@@ -92,16 +92,9 @@ const App: React.FC = () => {
           } : null,
         });
 
-        // TEMPORARY: Skip KYC verification for development
-        // TODO: Re-enable KYC once Edge Function is fixed
-        setPhase('DASHBOARD');
-
-        // Original KYC check (commented out for now)
-        // if (userData.profile.kyc_verified) {
-        //   setPhase('DASHBOARD');
-        // } else {
-        //   setPhase('KYC');
-        // }
+        // ONLY switch to DASHBOARD if we are currently in AUTH or KYC.
+        // This prevents resetting the view when refreshing data in background.
+        setPhase(current => (current === 'AUTH' || current === 'KYC') ? 'DASHBOARD' : current);
       } else {
         console.warn("User data not found for ID:", uid);
         setPhase('AUTH');
