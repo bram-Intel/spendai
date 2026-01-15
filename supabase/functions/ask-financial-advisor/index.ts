@@ -82,11 +82,19 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fetch detailed spending context
-    const { data: spendingSummary, error: summaryError } = await supabase.rpc('get_ai_spending_summary', { p_wallet_id: userData.id });
-    const { data: detailedHistory, error: historyError } = await supabase.rpc('get_ai_detailed_history', { p_wallet_id: userData.id, p_limit: 20 });
+    let spendingSummary = null;
+    let detailedHistory = [];
 
-    if (summaryError || historyError) {
-      console.error('Error fetching context:', summaryError || historyError);
+    try {
+      const { data: summary, error: summaryError } = await supabase.rpc('get_ai_spending_summary', { p_wallet_id: userData.id });
+      if (!summaryError) spendingSummary = summary;
+      else console.error('RPC Error (summary):', summaryError);
+
+      const { data: history, error: historyError } = await supabase.rpc('get_ai_detailed_history', { p_wallet_id: userData.id, p_limit: 20 });
+      if (!historyError) detailedHistory = history;
+      else console.error('RPC Error (history):', historyError);
+    } catch (e) {
+      console.error('Error calling context RPCs:', e);
     }
 
     const historyText = detailedHistory && detailedHistory.length > 0
@@ -100,6 +108,7 @@ Deno.serve(async (req: Request) => {
       ? `Total Spending this month: ₦${(spendingSummary.total_spending / 100).toLocaleString()}`
       : 'No spending summary available';
 
+    // Convert balance from kobo to naira
     const balanceNaira = (userData.balance || 0) / 100;
 
     const systemPrompt = `You are the AUTHORIZED AI TRANSACTION AGENT for Spend.AI (Nigeria).
