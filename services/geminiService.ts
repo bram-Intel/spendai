@@ -12,6 +12,11 @@ export const geminiService = {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     const functionUrl = `${supabaseUrl}/functions/v1/ask-financial-advisor`;
+    console.log('DEBUG: Target Config', {
+      url: supabaseUrl,
+      keyLength: supabaseAnonKey?.length,
+      userRole: session.user.role
+    });
 
     try {
       const response = await fetch(functionUrl, {
