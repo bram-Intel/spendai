@@ -148,7 +148,7 @@ User's Question: ${prompt}`;
       const errorText = await geminiResponse.text();
       console.error('Gemini API error:', errorText);
       return new Response(
-        JSON.stringify({ error: 'Failed to get response from AI advisor' }),
+        JSON.stringify({ error: 'Failed to get response from AI advisor', details: errorText }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
