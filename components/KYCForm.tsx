@@ -23,16 +23,20 @@ export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess, onLogout }) => {
         setIsVerifying(true);
 
         try {
-            // Check if user is authenticated
-            const { data: { session } } = await supabase.auth.getSession();
+            // Get a fresh session
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             console.log('Current session:', session);
 
-            if (!session) {
+            if (sessionError || !session) {
                 throw new Error('You must be logged in to verify your identity. Please refresh the page and try again.');
             }
 
+            // Call Edge Function with explicit authorization header
             const { data, error } = await supabase.functions.invoke('verify-identity', {
-                body: { bvn, dob }
+                body: { bvn, dob },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
             });
 
             console.log('Edge Function Response:', { data, error });
