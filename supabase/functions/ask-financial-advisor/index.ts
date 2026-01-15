@@ -1,108 +1,177 @@
-
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.0.0"
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface AskAdvisorRequest {
+  prompt: string;
 }
 
-serve(async (req) => {
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders })
+Deno.serve(async (req: Request) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    // Get the authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    try {
-        const supabaseClient = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-            { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
-        )
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
 
-        // 1. Get User
-        const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
-        if (authError || !user) {
-            throw new Error('Unauthorized')
-        }
-
-        const { prompt } = await req.json()
-
-        if (!prompt) {
-            throw new Error('Prompt is required')
-        }
-
-        // 2. Fetch Context (Balance & Transactions)
-        // We can use the service role key to ensure we get everything, but RLS should allow the user to read their own data.
-        // Let's use the authenticated client to respect RLS.
-
-        // Fetch Wallet
-        const { data: wallet } = await supabaseClient
-            .from('wallets')
-            .select('*')
-            .eq('user_id', user.id)
-            .single()
-
-        // Fetch Recent Transactions
-        const { data: transactions } = await supabaseClient
-            .from('transactions')
-            .select('*')
-            .eq('wallet_id', wallet?.id)
-            .order('created_at', { ascending: false })
-            .limit(5)
-
-        const balanceNaira = wallet ? (wallet.balance / 100).toFixed(2) : '0.00';
-        const txContext = transactions?.map((t: any) =>
-            `- ${t.type.toUpperCase()}: ₦${(t.amount / 100).toFixed(2)} (${t.description})`
-        ).join('\n') || "No recent transactions.";
-
-        // 3. Construct System Prompt
-        const systemPrompt = `You are a helpful and wise financial advisor for the Spend.AI app.
-    The user's current balance is ₦${balanceNaira}.
-    Their recent transactions are:
-    ${txContext}
-    
-    Answer the user's question based on this context if relevant. 
-    Be concise, friendly, and use formatting.`;
-
-        // 4. Call Gemini API
-        const geminiKey = Deno.env.get('GEMINI_API_KEY')
-        if (!geminiKey) throw new Error('GEMINI_API_KEY not configured')
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: systemPrompt + "\n\nUser Question: " + prompt }]
-                }]
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
-
-        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
-
-        return new Response(
-            JSON.stringify({ response: aiText }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            },
-        )
-
-    } catch (error) {
-        return new Response(
-            JSON.stringify({ error: error.message }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            },
-        )
+    // Get the authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-})
+
+    // Parse request body
+    const { prompt }: AskAdvisorRequest = await req.json();
+
+    if (!prompt || prompt.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Prompt is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get Gemini API key
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) {
+      console.error('GEMINI_API_KEY not configured');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Fetch user's wallet and recent transactions
+    const { data: userData, error: dataError } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('user_id', user.id)
+      .single();
+
+    if (dataError) {
+      console.error('Error fetching wallet:', dataError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch user data' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Fetch last 5 transactions
+    const { data: transactions, error: txError } = await supabase
+      .from('transactions')
+      .select('amount, type, description, category, created_at')
+      .eq('wallet_id', userData.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (txError) {
+      console.error('Error fetching transactions:', txError);
+    }
+
+    // Convert balance from kobo to naira
+    const balanceNaira = (userData.balance || 0) / 100;
+
+    // Build context for Gemini
+    const transactionSummary = transactions && transactions.length > 0
+      ? transactions.map(tx => {
+          const amountNaira = tx.amount / 100;
+          return `- ${tx.type === 'credit' ? '+' : '-'}₦${Math.abs(amountNaira).toFixed(2)} (${tx.category || 'Other'}): ${tx.description || 'No description'}`;
+        }).join('\n')
+      : 'No recent transactions';
+
+    const systemPrompt = `You are a helpful financial advisor for Spend.AI, a Nigerian fintech app. 
+You provide personalized financial advice based on the user's wallet balance and transaction history.
+
+User's Current Financial Status:
+- Wallet Balance: ₦${balanceNaira.toFixed(2)}
+- Recent Transactions:
+${transactionSummary}
+
+Guidelines:
+- Be concise and practical
+- Use Nigerian context (Naira currency, local financial practices)
+- Provide actionable advice
+- Be encouraging and supportive
+- If the user asks about features not related to their finances, politely redirect them
+- Never make up transaction data or balance information
+
+User's Question: ${prompt}`;
+
+    // Call Gemini API
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: systemPrompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 500,
+          }
+        }),
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', errorText);
+      return new Response(
+        JSON.stringify({ error: 'Failed to get response from AI advisor' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const geminiData = await geminiResponse.json();
+    const aiResponse = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+
+    // Return success
+    return new Response(
+      JSON.stringify({
+        success: true,
+        response: aiResponse,
+        context: {
+          balance: balanceNaira,
+          transactionCount: transactions?.length || 0,
+        }
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('Error in ask-financial-advisor function:', error);
+    return new Response(
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
