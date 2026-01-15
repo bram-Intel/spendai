@@ -9,7 +9,7 @@ interface DashboardProps {
     user: User;
     transactions: Transaction[];
     activeLink: SecureLink | null;
-    onCreateLink: (amount: number, code: string) => void;
+    onCreateLink: (link: SecureLink) => void;
     onPreviewLink: () => void;
 }
 
@@ -63,7 +63,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
 
         try {
             const link = await secureLinksService.createLink(Number(linkAmount), linkCode, 'Spend Request Link');
-            onCreateLink(link.amount, link.link_code);
+            onCreateLink(link);
             setLinkCode('');
             setLinkAmount('');
         } catch (err: any) {
@@ -207,12 +207,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                                                 <span className="text-2xl font-bold text-white">₦{activeLink.amount.toLocaleString()}</span>
                                                 <div className="flex items-center gap-2 bg-slate-700/50 px-2 py-1 rounded text-xs font-mono text-indigo-300 border border-indigo-500/20">
                                                     <Lock size={10} />
-                                                    {activeLink.code}
+                                                    {activeLink.link_code}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="flex gap-3">
-                                            <button className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl text-sm font-medium transition-colors border border-slate-700">
+                                            <button
+                                                onClick={() => handleCopy(activeLink.link_code)}
+                                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl text-sm font-medium transition-colors border border-slate-700"
+                                            >
                                                 Copy
                                             </button>
                                             <button

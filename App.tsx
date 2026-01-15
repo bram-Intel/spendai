@@ -4,7 +4,7 @@ import { AuthForm } from './components/AuthForm';
 import { KYCForm } from './components/KYCForm';
 import { Dashboard } from './components/Dashboard';
 import { LinkView } from './components/LinkView';
-import { AppPhase, User, SecureLink } from './types';
+import { AppPhase, User, SecureLink, Transaction } from './types';
 import { MOCK_TRANSACTIONS, MOCK_VIRTUAL_ACCOUNT } from './constants';
 import { authService } from './services/authService';
 import { databaseService } from './services/databaseService';
@@ -68,7 +68,7 @@ const App: React.FC = () => {
         // TEMPORARY: Skip KYC verification for development
         // TODO: Re-enable KYC once Edge Function is fixed
         setPhase('DASHBOARD');
-        
+
         // Original KYC check (commented out for now)
         // if (userData.profile.kyc_verified) {
         //   setPhase('DASHBOARD');
@@ -114,15 +114,9 @@ const App: React.FC = () => {
     setActiveLink(null);
   };
 
-  const handleCreateLink = (amount: number, code: string) => {
-    setActiveLink({
-      amount,
-      code,
-      id: `lnk_${Date.now()}`,
-      createdAt: new Date(),
-      isUsed: false
-    });
-    setUser(prev => ({ ...prev, walletBalance: prev.walletBalance - amount }));
+  const handleCreateLink = (link: SecureLink) => {
+    setActiveLink(link);
+    setUser(prev => ({ ...prev, walletBalance: prev.walletBalance - link.amount }));
   };
 
   // Render Logic
