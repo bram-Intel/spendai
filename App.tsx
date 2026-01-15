@@ -50,6 +50,14 @@ const App: React.FC = () => {
 
   const loadUserData = async (uid: string) => {
     try {
+      // Verify session is still valid
+      const { data: sessionData } = await authService.getSession();
+      if (!sessionData?.session) {
+        console.warn('No valid session found, redirecting to auth');
+        setPhase('AUTH');
+        return;
+      }
+
       const userData = await databaseService.getUserData(uid);
       if (userData) {
         setUser({
@@ -76,6 +84,7 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.error("Failed to load user data:", e);
+      setPhase('AUTH');
     }
   };
 
