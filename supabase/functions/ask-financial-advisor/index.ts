@@ -122,15 +122,6 @@ Guidelines:
 
 User's Question: ${prompt}`;
 
-    // Debug: List models if we're having trouble
-    try {
-      const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
-      const listData = await listResp.json();
-      console.log('DEBUG: Available models:', listData.models?.map((m: any) => m.name));
-    } catch (e) {
-      console.error('DEBUG: Failed to list models:', e);
-    }
-
     // Call Gemini API
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
@@ -157,23 +148,10 @@ User's Question: ${prompt}`;
       const errorText = await geminiResponse.text();
       console.error('Gemini API error:', errorText);
 
-      // Fetch models list to help debug why the model was not found
-      let availableModels = [];
-      try {
-        const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
-        const listData = await listResp.json();
-        availableModels = listData.models?.map((m: any) => m.name) || [];
-      } catch (e) {
-        availableModels = ['Failed to fetch models: ' + e.message];
-      }
-
       return new Response(
         JSON.stringify({
           error: 'Failed to get response from AI advisor',
-          details: errorText,
-          availableModels,
-          keyPrefix: geminiApiKey?.substring(0, 6) + '...',
-          keyLength: geminiApiKey?.length
+          details: errorText
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
