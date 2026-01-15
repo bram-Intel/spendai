@@ -28,8 +28,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
     const [linkAmount, setLinkAmount] = useState('');
     const [linkCode, setLinkCode] = useState('');
 
+    const [showCopied, setShowCopied] = useState(false);
+
     const handleCopy = (text: string) => {
-        navigator.clipboard.writeText(text);
+        // Create a full URL for the link (mocking the base URL for now)
+        const fullUrl = `${window.location.origin}/link/${text}`;
+        navigator.clipboard.writeText(fullUrl);
+        setShowCopied(true);
+        setTimeout(() => setShowCopied(false), 2000);
     };
 
     /* 
@@ -211,7 +217,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex gap-3">
+                                        <div className="flex gap-3 relative">
+                                            {showCopied && (
+                                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg animate-bounce z-50">
+                                                    LINK COPIED!
+                                                </div>
+                                            )}
                                             <button
                                                 onClick={() => handleCopy(activeLink.link_code)}
                                                 className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl text-sm font-medium transition-colors border border-slate-700"

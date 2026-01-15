@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SecureLink } from '../types';
-import { Lock, Unlock, CheckCircle, ChevronLeft, ArrowRight, Loader2, Building2, CreditCard, Banknote } from 'lucide-react';
+import { Lock, Unlock, CheckCircle, ChevronLeft, ArrowRight, Loader2, Building2, CreditCard, Banknote, Clock } from 'lucide-react';
 import { secureLinksService } from '../services/secureLinksService';
+import { supabase } from '../lib/supabase';
 
 interface LinkViewProps {
     linkData: SecureLink;
@@ -29,13 +30,41 @@ const NIGERIAN_BANKS = [
 
 export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
     const [passcode, setPasscode] = useState('');
-    const [step, setStep] = useState<'VERIFY' | 'DETAILS' | 'SUBMITTING' | 'SUCCESS'>('VERIFY');
+    const [step, setStep] = useState<'VERIFY' | 'DETAILS' | 'SUBMITTING' | 'WAITING' | 'SUCCESS'>('VERIFY');
     const [error, setError] = useState<string | null>(null);
 
     // Form Details
     const [amount, setAmount] = useState('');
     const [accountNumber, setAccountNumber] = useState('');
     const [bankName, setBankName] = useState('');
+
+    // Realtime Subscription
+    useEffect(() => {
+        if (step !== 'WAITING') return;
+
+        const channel = (supabase as any)
+            .channel('link_approval')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'secure_links',
+                    filter: `id=eq.${linkData.id}`
+                },
+                (payload: any) => {
+                    console.log('Link updated:', payload);
+                    if (payload.new.status === 'approved') {
+                        setStep('SUCCESS');
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            (supabase as any).removeChannel(channel);
+        };
+    }, [step, linkData.id]);
 
     const handleVerify = (e: React.FormEvent) => {
         e.preventDefault();
@@ -62,7 +91,7 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
                 accountNumber,
                 bankName
             );
-            setStep('SUCCESS');
+            setStep('WAITING');
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Submission failed');
@@ -89,13 +118,35 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
                         <div className="w-24 h-24 bg-gradient-to-tr from-emerald-400 to-teal-300 rounded-full flex items-center justify-center mx-auto mb-8 shadow-emerald-900/40">
                             <CheckCircle size={48} className="text-white" strokeWidth={3} />
                         </div>
-                        <h2 className="text-3xl font-bold mb-2">Request Sent!</h2>
-                        <p className="text-emerald-200/60 mb-8">Your brother/friend will approve the ₦{Number(amount).toLocaleString()} payment shortly.</p>
+                        <h2 className="text-3xl font-bold mb-2">Approved!</h2>
+                        <p className="text-emerald-200/60 mb-8">The ₦{Number(amount).toLocaleString()} payment has been processed successfully.</p>
                         <button
                             onClick={onBack}
                             className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl border border-white/10"
                         >
                             Done
+                        </button>
+                    </div>
+                ) : step === 'WAITING' ? (
+                    <div className="glass-dark border-amber-500/30 p-10 rounded-[2.5rem] text-center shadow-2xl animate-fade-in">
+                        <div className="w-24 h-24 bg-gradient-to-tr from-amber-400 to-orange-400 rounded-full flex items-center justify-center mx-auto mb-8 shadow-amber-900/40 relative">
+                            <div className="absolute inset-0 bg-amber-400 rounded-full animate-ping opacity-25"></div>
+                            <Clock size={48} className="text-white relative z-10" strokeWidth={3} />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 tracking-tight">Waiting for Approval</h2>
+                        <p className="text-amber-200/60 mb-8 text-sm px-4">Your request for ₦{Number(amount).toLocaleString()} is being reviewed. This screen will update automatically.</p>
+
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-8">
+                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-2">Request Details</p>
+                            <p className="text-sm font-bold text-white">{bankName}</p>
+                            <p className="text-xs text-white/60 font-mono tracking-widest">{accountNumber}</p>
+                        </div>
+
+                        <button
+                            onClick={onBack}
+                            className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl border border-white/10"
+                        >
+                            Cancel Request
                         </button>
                     </div>
                 ) : step === 'VERIFY' ? (
