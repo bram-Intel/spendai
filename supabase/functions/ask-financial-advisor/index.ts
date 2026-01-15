@@ -152,9 +152,9 @@ User's Input: ${prompt}`;
 
     console.log('Calling Gemini API for user:', user.id);
 
-    // Call Gemini API - Using v1 for better stability
+    // Call Gemini API - Using v1beta and gemini-flash-latest as verified in tests
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
