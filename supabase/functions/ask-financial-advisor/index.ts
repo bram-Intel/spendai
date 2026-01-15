@@ -156,8 +156,25 @@ User's Question: ${prompt}`;
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
       console.error('Gemini API error:', errorText);
+
+      // Fetch models list to help debug why the model was not found
+      let availableModels = [];
+      try {
+        const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+        const listData = await listResp.json();
+        availableModels = listData.models?.map((m: any) => m.name) || [];
+      } catch (e) {
+        availableModels = ['Failed to fetch models: ' + e.message];
+      }
+
       return new Response(
-        JSON.stringify({ error: 'Failed to get response from AI advisor', details: errorText }),
+        JSON.stringify({
+          error: 'Failed to get response from AI advisor',
+          details: errorText,
+          availableModels,
+          keyPrefix: geminiApiKey?.substring(0, 6) + '...',
+          keyLength: geminiApiKey?.length
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
