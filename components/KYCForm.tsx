@@ -27,7 +27,12 @@ export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess, onLogout }) => {
                 body: { bvn, dob }
             });
 
-            if (error) throw error;
+            console.log('Edge Function Response:', { data, error });
+
+            if (error) {
+                console.error('Edge Function Error:', error);
+                throw new Error(`Edge Function Error: ${error.message || JSON.stringify(error)}`);
+            }
 
             if (data && !data.success) {
                 throw new Error(data.error || 'Verification failed');
@@ -35,6 +40,7 @@ export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess, onLogout }) => {
 
             onSuccess();
         } catch (err: any) {
+            console.error('KYC Error:', err);
             setError(err.message || "An error occurred during verification.");
             setIsVerifying(false);
         }
