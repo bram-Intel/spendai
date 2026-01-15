@@ -32,11 +32,14 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
     const [passcode, setPasscode] = useState('');
     const [step, setStep] = useState<'VERIFY' | 'DETAILS' | 'SUBMITTING' | 'WAITING' | 'SUCCESS'>('VERIFY');
     const [error, setError] = useState<string | null>(null);
+    const [isLive, setIsLive] = useState(false);
 
     // Form Details
     const [amount, setAmount] = useState('');
     const [accountNumber, setAccountNumber] = useState('');
     const [bankName, setBankName] = useState('');
+
+    const [isChecking, setIsChecking] = useState(false);
 
     // 360° Real-time Sync & Safety Polling
     useEffect(() => {
@@ -46,8 +49,8 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
             return;
         }
 
-        // 2. Setup Real-time Channel
-        console.log('Initiating Real-time sync for link:', linkData.id);
+        // 2. Setup Real-time Channel (BROADENED to ensure arrival)
+        console.log('Initiating Broad Real-time sync for link:', linkData.id);
         const channel = (supabase as any)
             .channel(`sync_${linkData.id}`)
             .on(
@@ -55,40 +58,48 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
                 {
                     event: 'UPDATE',
                     schema: 'public',
-                    table: 'secure_links',
-                    filter: `id=eq.${linkData.id}`
+                    table: 'secure_links'
+                    // Removing strict ID filter here as it sometimes fails on anonymous sockets
                 },
                 (payload: any) => {
-                    console.log('Real-time event received:', payload.new.status);
-                    if (payload.new.status === 'approved' || payload.new.status === 'rejected') {
-                        setStep('SUCCESS');
+                    // Manually filter the ID in Javascript for robustness
+                    if (payload.new.id === linkData.id) {
+                        console.log('Real-time event received:', payload.new.status);
+                        if (payload.new.status === 'approved' || payload.new.status === 'rejected') {
+                            setStep('SUCCESS');
+                        }
                     }
                 }
             )
             .subscribe((status: string) => {
                 console.log('Sync status:', status);
+                setIsLive(status === 'SUBSCRIBED');
             });
 
-        // 3. Safety Fallback: Manual polling every 5 seconds
-        // (Just in case Real-time fails or disconnects)
-        const pollInterval = setInterval(async () => {
-            if (step === 'SUCCESS') return;
-            try {
-                const latest = await secureLinksService.getLinkByCode(linkData.link_code);
-                if (latest && (latest.status === 'approved' || latest.status === 'rejected')) {
-                    console.log('Polling detected status update:', latest.status);
-                    setStep('SUCCESS');
-                }
-            } catch (err) {
-                console.warn('Sync polling failed:', err);
-            }
-        }, 5000);
+        // 3. Safety Fallback: Manual polling every 8 seconds
+        const pollInterval = setInterval(manualCheck, 8000);
 
         return () => {
             (supabase as any).removeChannel(channel);
             clearInterval(pollInterval);
         };
     }, [linkData.id, linkData.status, linkData.link_code]);
+
+    const manualCheck = async () => {
+        if (step === 'SUCCESS') return;
+        setIsChecking(true);
+        try {
+            const latest = await secureLinksService.getLinkByCode(linkData.link_code);
+            if (latest && (latest.status === 'approved' || latest.status === 'rejected')) {
+                console.log('Status update detected:', latest.status);
+                setStep('SUCCESS');
+            }
+        } catch (err) {
+            console.warn('Sync check failed:', err);
+        } finally {
+            setTimeout(() => setIsChecking(false), 1000);
+        }
+    };
 
     const handleVerify = (e: React.FormEvent) => {
         e.preventDefault();
