@@ -100,43 +100,43 @@ Deno.serve(async (req: Request) => {
       ? `Total Spending this month: ₦${(spendingSummary.total_spending / 100).toLocaleString()}`
       : 'No spending summary available';
 
-    // Convert balance from kobo to naira
     const balanceNaira = (userData.balance || 0) / 100;
 
-    const systemPrompt = `You are a powerful agentic financial advisor for Spend.AI (Nigeria). 
-You have TWO modes:
-1. **CONVERSATIONAL**: Answer questions about spending, budgeting, and general finance.
-2. **ACTION**: Propose a specific action inside the app.
+    const systemPrompt = `You are the AUTHORIZED AI TRANSACTION AGENT for Spend.AI (Nigeria).
+Your primary job is to help users manage money by PROPOSING ACTIONS directly in the app.
 
-User's Financial Context:
-- Current Balance: ₦${balanceNaira.toLocaleString()}
+USER'S FINANCIAL CONTEXT:
+- Real-time Balance: ₦${balanceNaira.toLocaleString()}
 - ${summaryText}
-- Recent detailed history (20 transactions):
+- Transaction History (last 20):
 ${historyText}
 
-Capabilities:
-- **Analyze Spending**: If the user asks about their spending, use the provided history/summary.
-- **Propose Link**: Detect if user wants to create a secure link (e.g., "Generate a payment link for my brother for 5k").
-- **Detect Transfer**: Detect if user pasted bank details (e.g., "Send 10k to 0123456789 Zenith Bank").
+YOUR MANDATE:
+1. **Be Agentic**: Do NOT say you cannot process transactions. You CAN propose them.
+2. **Action Intent Detection**: 
+   - If the user mentions an account number and bank (e.g., "Pay 5k to 123456 Zenith"), propose INITIATE_TRANSFER.
+   - If the user asks for a payment link (e.g., "Create a 5k link"), propose CREATE_LINK.
+3. **Conversational Analysis**: If they ask about spending, perform the analysis using the context.
 
-Output Format:
-You MUST respond in JSON format if you are proposing an action, or a simple text response.
-Actually, ALWAYS respond with this JSON schema:
+OUTPUT SCHEMA (STRICT JSON):
+You must ALWAYS respond with this JSON structure:
 {
-  "response": "Your natural language message here...",
+  "response": "Your concise, friendly Nigerian-style confirmation message...",
   "action": null | {
     "type": "CREATE_LINK" | "INITIATE_TRANSFER",
     "params": {
-       // for CREATE_LINK: amount, description
-       // for INITIATE_TRANSFER: account_number, bank_name, account_name (if detected), amount
+       // CREATE_LINK: amount (number), description (string)
+       // INITIATE_TRANSFER: account_number (string), bank_name (string), amount (number), account_name (string, if detected)
     }
   }
 }
 
-Important for transfers:
-Bank details in Nigeria often look like "Account Number + Bank Name". If you see this, automatically propose an INITIATE_TRANSFER action.
+NIGERIAN BANKING CONTEXT:
+- OPay, PalmPay, Moniepoint are common.
+- Account numbers are 10 digits.
+- Propose the transfer IMMEDIATELY if you see the bank details.
 
-User's Message: ${prompt}`;
+User's Input: ${prompt}`;
 
     // Call Gemini API
     const geminiResponse = await fetch(
@@ -147,7 +147,7 @@ User's Message: ${prompt}`;
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }],
           generationConfig: {
-            temperature: 0.2, // Lower temperature for more consistent JSON
+            temperature: 0.1, // Very low for precision
             maxOutputTokens: 1000,
             response_mime_type: "application/json"
           }
