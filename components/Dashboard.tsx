@@ -129,23 +129,89 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
     };
 
     const handleSendMessage = async () => {
-        if (!inputMessage.trim()) return;
+        if (!inputMessage.trim() || isTyping) return;
 
-        const newUserMsg: ChatMessage = { role: 'user', text: inputMessage, timestamp: new Date() };
-        setChatMessages(prev => [...prev, newUserMsg]);
+        const userMsg: ChatMessage = {
+            role: 'user',
+            text: inputMessage,
+            timestamp: new Date()
+        };
+
+        setChatMessages(prev => [...prev, userMsg]);
         setInputMessage('');
         setIsTyping(true);
 
         try {
-            const botText = await geminiService.askFinancialAdvisor(inputMessage);
-            const newBotMsg: ChatMessage = { role: 'model', text: botText, timestamp: new Date() };
-            setChatMessages(prev => [...prev, newBotMsg]);
-        } catch (e: any) {
-            console.error(e);
-            const errorMsg: ChatMessage = { role: 'model', text: e.message || "Sorry, I encountered an error.", timestamp: new Date() };
-            setChatMessages(prev => [...prev, errorMsg]);
+            const { data: { session } } = await supabase.auth.getSession();
+            const response = await fetch(`${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/ask-financial-advisor`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ prompt: inputMessage })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                const aiMsg: ChatMessage = {
+                    role: 'model',
+                    text: result.response,
+                    action: result.action,
+                    timestamp: new Date()
+                };
+                setChatMessages(prev => [...prev, aiMsg]);
+            } else {
+                throw new Error(result.error || 'Failed to get AI response');
+            }
+        } catch (err: any) {
+            console.error('Chat error:', err);
+            setChatMessages(prev => [...prev, {
+                role: 'model',
+                text: "I'm having trouble connecting right now. Please try again later.",
+                timestamp: new Date()
+            }]);
         } finally {
             setIsTyping(false);
+        }
+    };
+
+    const handleExecuteAiAction = async (action: any) => {
+        if (action.type === 'CREATE_LINK') {
+            try {
+                // Set the link creation state
+                setLinkAmount(action.params.amount.toString());
+                // Trigger the creation logic (we can call the service directly)
+                const link = await secureLinksService.createLink(
+                    action.params.amount,
+                    '1234', // Default for AI generation
+                    action.params.description || 'AI Generated Link'
+                );
+                onCreateLink(link);
+
+                // Add follow up message
+                setChatMessages(prev => [...prev, {
+                    role: 'model',
+                    text: `Done! 🚀 I've generated a link for ₦${action.params.amount.toLocaleString()}. You can copy it above.`,
+                    timestamp: new Date()
+                }]);
+            } catch (err) {
+                console.error('AI Link creation failed:', err);
+            }
+        } else if (action.type === 'INITIATE_TRANSFER') {
+            // Since Paystack is not LIVE, we simulation it by recording a transaction
+            // But first, we need the user to approve with PIN? 
+            // For now, let's just trigger a "Success" message and record it.
+            // In a real app, this would open a 'Review Transfer' modal.
+
+            // For the Demo, let's just show a success message as if it happened.
+            setChatMessages(prev => [...prev, {
+                role: 'model',
+                text: `Transfer of ₦${action.params.amount?.toLocaleString()} to ${action.params.bank_name} (${action.params.account_number}) has been initiated simulation-style! In production, this would use Paystack.`,
+                timestamp: new Date()
+            }]);
+            onRefresh();
         }
     };
 
@@ -412,11 +478,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
                         {chatMessages.map((msg, idx) => (
                             <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                                <div className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                                <div className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm shadow-sm ${msg.role === 'user'
                                     ? 'bg-slate-900 text-white rounded-br-none'
                                     : 'bg-white text-slate-700 rounded-bl-none border border-slate-100'
                                     }`}>
-                                    {msg.text}
+                                    <p className="leading-relaxed">{msg.text}</p>
+
+                                    {/* Action Card */}
+                                    {msg.action && (
+                                        <div className="mt-4 p-4 rounded-xl bg-brand-50 border border-brand-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className="p-1.5 bg-brand-500 rounded-lg">
+                                                    <Sparkles size={14} className="text-white" />
+                                                </div>
+                                                <p className="text-[10px] font-bold text-brand-600 uppercase tracking-widest">AI Proposal</p>
+                                            </div>
+
+                                            {msg.action.type === 'CREATE_LINK' ? (
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center text-xs">
+                                                        <span className="text-brand-900/40">Amount</span>
+                                                        <span className="font-bold text-brand-900">₦{msg.action.params.amount?.toLocaleString()}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleExecuteAiAction(msg.action!)}
+                                                        className="w-full bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold py-2.5 rounded-lg transition-all"
+                                                    >
+                                                        Generate Link
+                                                    </button>
+                                                </div>
+                                            ) : msg.action.type === 'INITIATE_TRANSFER' ? (
+                                                <div className="space-y-3">
+                                                    <div className="bg-white/50 rounded-lg p-2 space-y-1">
+                                                        <p className="text-xs font-bold text-brand-900">{msg.action.params.bank_name}</p>
+                                                        <p className="text-[10px] text-brand-900/60 font-mono tracking-tighter">{msg.action.params.account_number}</p>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-xs">
+                                                        <span className="text-brand-900/40 text-[10px]">Amount</span>
+                                                        <span className="font-bold text-brand-900">₦{msg.action.params.amount?.toLocaleString() || '---'}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleExecuteAiAction(msg.action!)}
+                                                        className="w-full bg-brand-900 hover:bg-slate-800 text-white text-xs font-bold py-2.5 rounded-lg transition-all"
+                                                    >
+                                                        Confirm & Pay
+                                                    </button>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    )}
                                 </div>
                                 <span className="text-[10px] text-slate-400 mt-1 px-1">
                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

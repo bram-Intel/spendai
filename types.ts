@@ -29,6 +29,10 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
   timestamp: Date;
+  action?: {
+    type: 'CREATE_LINK' | 'INITIATE_TRANSFER';
+    params: any;
+  } | null;
 }
 
 export interface SecureLink {

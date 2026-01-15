@@ -81,68 +81,75 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Fetch last 5 transactions
-    const { data: transactions, error: txError } = await supabase
-      .from('transactions')
-      .select('amount, type, description, category, created_at')
-      .eq('wallet_id', userData.id)
-      .order('created_at', { ascending: false })
-      .limit(5);
+    // Fetch detailed spending context
+    const { data: spendingSummary, error: summaryError } = await supabase.rpc('get_ai_spending_summary', { p_wallet_id: userData.id });
+    const { data: detailedHistory, error: historyError } = await supabase.rpc('get_ai_detailed_history', { p_wallet_id: userData.id, p_limit: 20 });
 
-    if (txError) {
-      console.error('Error fetching transactions:', txError);
+    if (summaryError || historyError) {
+      console.error('Error fetching context:', summaryError || historyError);
     }
+
+    const historyText = detailedHistory && detailedHistory.length > 0
+      ? detailedHistory.map((tx: any) => {
+        const amountNaira = tx.amount / 100;
+        return `- [${new Date(tx.created_at).toLocaleDateString()}] ${tx.type === 'credit' ? '+' : '-'}₦${Math.abs(amountNaira).toLocaleString()} (${tx.category}): ${tx.description}`;
+      }).join('\n')
+      : 'No recent transactions';
+
+    const summaryText = spendingSummary
+      ? `Total Spending this month: ₦${(spendingSummary.total_spending / 100).toLocaleString()}`
+      : 'No spending summary available';
 
     // Convert balance from kobo to naira
     const balanceNaira = (userData.balance || 0) / 100;
 
-    // Build context for Gemini
-    const transactionSummary = transactions && transactions.length > 0
-      ? transactions.map(tx => {
-        const amountNaira = tx.amount / 100;
-        return `- ${tx.type === 'credit' ? '+' : '-'}₦${Math.abs(amountNaira).toFixed(2)} (${tx.category || 'Other'}): ${tx.description || 'No description'}`;
-      }).join('\n')
-      : 'No recent transactions';
+    const systemPrompt = `You are a powerful agentic financial advisor for Spend.AI (Nigeria). 
+You have TWO modes:
+1. **CONVERSATIONAL**: Answer questions about spending, budgeting, and general finance.
+2. **ACTION**: Propose a specific action inside the app.
 
-    const systemPrompt = `You are a helpful financial advisor for Spend.AI, a Nigerian fintech app. 
-You provide personalized financial advice based on the user's wallet balance and transaction history.
+User's Financial Context:
+- Current Balance: ₦${balanceNaira.toLocaleString()}
+- ${summaryText}
+- Recent detailed history (20 transactions):
+${historyText}
 
-User's Current Financial Status:
-- Wallet Balance: ₦${balanceNaira.toFixed(2)}
-- Recent Transactions:
-${transactionSummary}
+Capabilities:
+- **Analyze Spending**: If the user asks about their spending, use the provided history/summary.
+- **Propose Link**: Detect if user wants to create a secure link (e.g., "Generate a payment link for my brother for 5k").
+- **Detect Transfer**: Detect if user pasted bank details (e.g., "Send 10k to 0123456789 Zenith Bank").
 
-Guidelines:
-- Be concise and practical
-- Use Nigerian context (Naira currency, local financial practices)
-- Provide actionable advice
-- Be encouraging and supportive
-- Use real-time data where relevant (exchange rates, inflation, market trends) via internet search
-- If the user asks about features not related to their finances, politely redirect them
-- Never make up transaction data or balance information
+Output Format:
+You MUST respond in JSON format if you are proposing an action, or a simple text response.
+Actually, ALWAYS respond with this JSON schema:
+{
+  "response": "Your natural language message here...",
+  "action": null | {
+    "type": "CREATE_LINK" | "INITIATE_TRANSFER",
+    "params": {
+       // for CREATE_LINK: amount, description
+       // for INITIATE_TRANSFER: account_number, bank_name, account_name (if detected), amount
+    }
+  }
+}
 
-User's Question: ${prompt}`;
+Important for transfers:
+Bank details in Nigeria often look like "Account Number + Bank Name". If you see this, automatically propose an INITIATE_TRANSFER action.
 
-    // Call Gemini API with Google Search Grounding
+User's Message: ${prompt}`;
+
+    // Call Gemini API
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: systemPrompt
-            }]
-          }],
-          tools: [{
-            google_search: {}
-          }],
+          contents: [{ parts: [{ text: systemPrompt }] }],
           generationConfig: {
-            temperature: 0.7,
+            temperature: 0.2, // Lower temperature for more consistent JSON
             maxOutputTokens: 1000,
+            response_mime_type: "application/json"
           }
         }),
       }
@@ -162,16 +169,26 @@ User's Question: ${prompt}`;
     }
 
     const geminiData = await geminiResponse.json();
-    const aiResponse = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+    const resultText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '{"response": "Sorry, I could not generate a response.", "action": null}';
+
+    // Parse the JSON string from Gemini
+    let resultJson;
+    try {
+      resultJson = JSON.parse(resultText);
+    } catch (e) {
+      console.error('Failed to parse Gemini response as JSON:', resultText);
+      resultJson = { response: resultText, action: null };
+    }
 
     // Return success
     return new Response(
       JSON.stringify({
         success: true,
-        response: aiResponse,
+        response: resultJson.response,
+        action: resultJson.action,
         context: {
           balance: balanceNaira,
-          transactionCount: transactions?.length || 0,
+          historyCount: detailedHistory?.length || 0,
         }
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
