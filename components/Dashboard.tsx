@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, Transaction, ChatMessage, SecureLink } from '../types';
 import { Copy, ArrowUpRight, ArrowDownLeft, Send, Sparkles, Loader2, Link as LinkIcon, Lock, Eye, Wallet, CreditCard, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { geminiService } from '../services/geminiService';
 
 interface DashboardProps {
     user: User;
@@ -51,7 +52,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                 return;
             }
 
-            onCreateLink(Number(linkAmount), data.link_code); // Update parent state if needed
+            onCreateLink(Number(linkAmount), (data as any).link_code); // Update parent state if needed
             setLinkCode('');
             setLinkAmount('');
             // Maybe show success toast
@@ -69,19 +70,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
         setIsTyping(true);
 
         try {
-            // CALL EDGE FUNCTION
-            const { data, error } = await supabase.functions.invoke('ask-financial-advisor', {
-                body: { prompt: inputMessage }
-            });
-
-            if (error) throw error;
-
-            const botText = data.response || "I'm having trouble connecting to my brain right now.";
+            const botText = await geminiService.askFinancialAdvisor(inputMessage);
             const newBotMsg: ChatMessage = { role: 'model', text: botText, timestamp: new Date() };
             setChatMessages(prev => [...prev, newBotMsg]);
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            const errorMsg: ChatMessage = { role: 'model', text: "Sorry, I encountered an error.", timestamp: new Date() };
+            const errorMsg: ChatMessage = { role: 'model', text: e.message || "Sorry, I encountered an error.", timestamp: new Date() };
             setChatMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsTyping(false);
