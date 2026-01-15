@@ -38,18 +38,18 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
     const [accountNumber, setAccountNumber] = useState('');
     const [bankName, setBankName] = useState('');
 
-    // Realtime Subscription
+    // 360° Real-time Sync & Safety Polling
     useEffect(() => {
-        // If link is already approved/rejected, show success immediately
+        // 1. Initial Check: If link is already final, skip sync
         if (linkData.status === 'approved' || linkData.status === 'rejected') {
             setStep('SUCCESS');
             return;
         }
 
-        if (step !== 'WAITING') return;
-
+        // 2. Setup Real-time Channel
+        console.log('Initiating Real-time sync for link:', linkData.id);
         const channel = (supabase as any)
-            .channel('link_approval')
+            .channel(`sync_${linkData.id}`)
             .on(
                 'postgres_changes',
                 {
@@ -59,18 +59,36 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
                     filter: `id=eq.${linkData.id}`
                 },
                 (payload: any) => {
-                    console.log('Link updated:', payload);
+                    console.log('Real-time event received:', payload.new.status);
                     if (payload.new.status === 'approved' || payload.new.status === 'rejected') {
                         setStep('SUCCESS');
                     }
                 }
             )
-            .subscribe();
+            .subscribe((status: string) => {
+                console.log('Sync status:', status);
+            });
+
+        // 3. Safety Fallback: Manual polling every 5 seconds
+        // (Just in case Real-time fails or disconnects)
+        const pollInterval = setInterval(async () => {
+            if (step === 'SUCCESS') return;
+            try {
+                const latest = await secureLinksService.getLinkByCode(linkData.link_code);
+                if (latest && (latest.status === 'approved' || latest.status === 'rejected')) {
+                    console.log('Polling detected status update:', latest.status);
+                    setStep('SUCCESS');
+                }
+            } catch (err) {
+                console.warn('Sync polling failed:', err);
+            }
+        }, 5000);
 
         return () => {
             (supabase as any).removeChannel(channel);
+            clearInterval(pollInterval);
         };
-    }, [step, linkData.id, linkData.status]);
+    }, [linkData.id, linkData.status, linkData.link_code]);
 
     const handleVerify = (e: React.FormEvent) => {
         e.preventDefault();

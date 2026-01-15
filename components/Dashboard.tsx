@@ -50,10 +50,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
     const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
     const [pin, setPin] = useState('');
     const [isApproving, setIsApproving] = useState(false);
+    const [isLive, setIsLive] = useState(false);
 
-    // Fetch pending links on mount
+    // Fetch pending links and setup real-time subscription
     React.useEffect(() => {
         fetchPending();
+
+        // 360° Real-time Subscription for the Owner
+        const channel = (supabase as any)
+            .channel('dashboard_sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'secure_links' },
+                (payload: any) => {
+                    console.log('Real-time update on dashboard:', payload.eventType);
+                    fetchPending();
+                    onRefresh();
+                }
+            )
+            .subscribe((status: string) => {
+                setIsLive(status === 'SUBSCRIBED');
+            });
+
+        return () => {
+            (supabase as any).removeChannel(channel);
+        };
     }, []);
 
     const fetchPending = async () => {
@@ -263,7 +284,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                                     <Sparkles size={20} />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-slate-900">Incoming Requests</h3>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-bold text-slate-900">Incoming Requests</h3>
+                                        {isLive && (
+                                            <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-100">
+                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                                LIVE
+                                            </div>
+                                        )}
+                                    </div>
                                     <p className="text-xs text-slate-500">Links waiting for your approval</p>
                                 </div>
                             </div>
