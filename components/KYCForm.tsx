@@ -23,6 +23,14 @@ export const KYCForm: React.FC<KYCFormProps> = ({ onSuccess, onLogout }) => {
         setIsVerifying(true);
 
         try {
+            // Check if user is authenticated
+            const { data: { session } } = await supabase.auth.getSession();
+            console.log('Current session:', session);
+
+            if (!session) {
+                throw new Error('You must be logged in to verify your identity. Please refresh the page and try again.');
+            }
+
             const { data, error } = await supabase.functions.invoke('verify-identity', {
                 body: { bvn, dob }
             });
