@@ -1,53 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { SecureLink } from '../types';
-import { Lock, Unlock, CheckCircle, ChevronLeft, ArrowRight, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Lock, Unlock, CheckCircle, ChevronLeft, ArrowRight, Loader2, Building2, CreditCard, Banknote } from 'lucide-react';
+import { secureLinksService } from '../services/secureLinksService';
 
 interface LinkViewProps {
     linkData: SecureLink;
     onBack: () => void;
 }
 
+const NIGERIAN_BANKS = [
+    { code: '044', name: 'Access Bank' },
+    { code: '050', name: 'EcoBank' },
+    { code: '070', name: 'Fidelity Bank' },
+    { code: '011', name: 'First Bank' },
+    { code: '058', name: 'GTBank' },
+    { code: '030', name: 'Heritage Bank' },
+    { code: '301', name: 'Jaiz Bank' },
+    { code: '082', name: 'Keystone Bank' },
+    { code: '076', name: 'Polaris Bank' },
+    { code: '221', name: 'Stanbic IBTC' },
+    { code: '068', name: 'Standard Chartered' },
+    { code: '232', name: 'Sterling Bank' },
+    { code: '032', name: 'Union Bank' },
+    { code: '033', name: 'United Bank for Africa (UBA)' },
+    { code: '035', name: 'Wema Bank' },
+    { code: '057', name: 'Zenith Bank' }
+];
+
 export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
     const [passcode, setPasscode] = useState('');
-    const [status, setStatus] = useState<'LOCKED' | 'UNLOCKING' | 'SUCCESS' | 'ERROR'>('LOCKED');
+    const [step, setStep] = useState<'VERIFY' | 'DETAILS' | 'SUBMITTING' | 'SUCCESS'>('VERIFY');
+    const [error, setError] = useState<string | null>(null);
 
-    /* REPLACE: Use RPC to claim */
-    const handleUnlock = async (e: React.FormEvent) => {
+    // Form Details
+    const [amount, setAmount] = useState('');
+    const [accountNumber, setAccountNumber] = useState('');
+    const [bankName, setBankName] = useState('');
+
+    const handleVerify = (e: React.FormEvent) => {
         e.preventDefault();
-        if (passcode.length < 4) return;
+        if (passcode.length === 4) {
+            setStep('DETAILS');
+        }
+    };
 
-        setStatus('UNLOCKING');
+    const handleSubmitRequest = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!amount || !accountNumber || !bankName) {
+            setError('Please fill all fields');
+            return;
+        }
 
-        // Local check first if we have linkData (which we do if passed as prop), but real security is backend.
-        // If we are claiming via ID/Code entered manually, we might not have linkData.
-        // Here we have linkData from props, so we are "claiming" the one being viewed.
-        // BUT typically the "code" is the secret key. 
-        // If linkData.code is visible to the user before unlocking, then it's not a secret.
-        // In our simplified model, the 'code' is the passcode.
-
-        // We call RPC `claim_payment_link`.
+        setStep('SUBMITTING');
+        setError(null);
 
         try {
-            const { data, error } = await (supabase as any).rpc('claim_payment_link', {
-                p_link_code: linkData.link_code, // Updated to link_code from types.ts
-                p_passcode: passcode      // The 4-digit secret
-            });
-
-            if (error) {
-                console.error(error);
-                setStatus('ERROR');
-                setTimeout(() => setStatus('LOCKED'), 1000);
-                return;
-            }
-
-            setStatus('SUCCESS');
-            // Optionally callback to refresh user balance
-            // onClaimSuccess(); 
-        } catch (err) {
+            await secureLinksService.submitRequest(
+                linkData.link_code,
+                passcode,
+                Number(amount),
+                accountNumber,
+                bankName
+            );
+            setStep('SUCCESS');
+        } catch (err: any) {
             console.error(err);
-            setStatus('ERROR');
-            setTimeout(() => setStatus('LOCKED'), 1000);
+            setError(err.message || 'Submission failed');
+            setStep('DETAILS');
         }
     };
 
@@ -56,109 +75,138 @@ export const LinkView: React.FC<LinkViewProps> = ({ linkData, onBack }) => {
             {/* Dynamic Background */}
             <div className="absolute top-[-20%] left-[-20%] w-[600px] h-[600px] bg-indigo-600/30 rounded-full blur-[120px] animate-pulse-slow"></div>
             <div className="absolute bottom-[-20%] right-[-20%] w-[600px] h-[600px] bg-purple-600/30 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '1.5s' }}></div>
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05]"></div>
 
-            {/* Back Navigation */}
             <button onClick={onBack} className="absolute top-8 left-8 text-white/50 hover:text-white flex items-center gap-2 z-20 transition-colors group">
                 <div className="p-2 rounded-full bg-white/5 group-hover:bg-white/10 border border-white/5 backdrop-blur-sm">
                     <ChevronLeft size={20} />
                 </div>
-                <span className="text-sm font-medium">Dashboard</span>
+                <span className="text-sm font-medium">Back</span>
             </button>
 
             <div className="relative z-10 w-full max-w-sm">
-                {status === 'SUCCESS' ? (
-                    <div className="relative animate-fade-in">
-                        {/* Success Card */}
-                        <div className="glass-dark border-emerald-500/30 p-10 rounded-[2.5rem] text-center shadow-2xl shadow-emerald-900/40 relative overflow-hidden">
-                            <div className="absolute inset-0 bg-emerald-500/10 mix-blend-overlay"></div>
-
-                            <div className="relative z-10">
-                                <div className="w-24 h-24 bg-gradient-to-tr from-emerald-400 to-teal-300 rounded-full flex items-center justify-center mx-auto mb-8 shadow-[0_0_40px_rgba(52,211,153,0.5)] animate-slide-up">
-                                    <CheckCircle size={48} className="text-white drop-shadow-md" strokeWidth={3} />
-                                </div>
-
-                                <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">Unlocked!</h2>
-                                <p className="text-emerald-200/80 font-medium mb-8">Funds claimed successfully</p>
-
-                                <div className="bg-emerald-950/50 border border-emerald-500/20 rounded-2xl py-6 px-4 mb-6">
-                                    <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mb-1">Amount Received</p>
-                                    <div className="text-5xl font-bold text-white tracking-tighter">
-                                        ₦{linkData.amount.toLocaleString()}
-                                    </div>
-                                </div>
-
-                                <p className="text-xs text-slate-400">Transaction ID: {linkData.id.toUpperCase()}</p>
-                            </div>
+                {step === 'SUCCESS' ? (
+                    <div className="glass-dark border-emerald-500/30 p-10 rounded-[2.5rem] text-center shadow-2xl">
+                        <div className="w-24 h-24 bg-gradient-to-tr from-emerald-400 to-teal-300 rounded-full flex items-center justify-center mx-auto mb-8 shadow-emerald-900/40">
+                            <CheckCircle size={48} className="text-white" strokeWidth={3} />
                         </div>
+                        <h2 className="text-3xl font-bold mb-2">Request Sent!</h2>
+                        <p className="text-emerald-200/60 mb-8">Your brother/friend will approve the ₦{Number(amount).toLocaleString()} payment shortly.</p>
+                        <button
+                            onClick={onBack}
+                            className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl border border-white/10"
+                        >
+                            Done
+                        </button>
+                    </div>
+                ) : step === 'VERIFY' ? (
+                    <div className="glass-dark p-8 rounded-[2.5rem] shadow-2xl">
+                        <div className="text-center mb-10">
+                            <div className="w-20 h-20 bg-indigo-500 rounded-3xl flex items-center justify-center mx-auto mb-6 transform rotate-3">
+                                <Lock size={36} className="text-white" strokeWidth={2.5} />
+                            </div>
+                            <h2 className="text-2xl font-bold">Secure Access</h2>
+                            <p className="text-indigo-200/50 text-sm mt-2">Enter the 4-digit passcode</p>
+                        </div>
+                        <form onSubmit={handleVerify}>
+                            <input
+                                type="text"
+                                value={passcode}
+                                onChange={(e) => setPasscode(e.target.value)}
+                                maxLength={4}
+                                placeholder="••••"
+                                className="w-full bg-slate-900/50 border border-white/10 text-center text-5xl tracking-[0.5em] font-mono py-6 rounded-2xl mb-8 focus:border-indigo-400 focus:outline-none"
+                            />
+                            <button
+                                type="submit"
+                                disabled={passcode.length < 4}
+                                className="w-full bg-white text-slate-950 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform disabled:opacity-50"
+                            >
+                                Continue <ArrowRight size={20} />
+                            </button>
+                        </form>
                     </div>
                 ) : (
-                    <div className={`glass-dark p-8 md:p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden ${status === 'ERROR' ? 'animate-shake border-red-500/50' : ''}`}>
-
-                        <div className="text-center mb-10 relative z-10">
-                            <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-purple-500/30 transform rotate-3">
-                                {status === 'UNLOCKING' ? (
-                                    <Unlock size={36} className="text-white animate-bounce" strokeWidth={2.5} />
-                                ) : (
-                                    <Lock size={36} className="text-white" strokeWidth={2.5} />
-                                )}
+                    <div className="glass-dark p-8 rounded-[2.5rem] shadow-2xl animate-fade-in">
+                        <div className="text-center mb-8">
+                            <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Request Payment</h2>
+                            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+                                <span className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></span>
+                                <span className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Active Link</span>
                             </div>
-                            <h2 className="text-2xl font-bold text-white tracking-tight">Secure Transfer</h2>
-                            <p className="text-indigo-200/70 text-sm mt-2 font-medium">Enter the 4-digit code to unlock</p>
                         </div>
 
-                        <form onSubmit={handleUnlock} className="relative z-10">
-                            <div className="mb-8">
-                                <input
-                                    type="text"
-                                    value={passcode}
-                                    onChange={(e) => setPasscode(e.target.value)}
-                                    maxLength={4}
-                                    placeholder="••••"
-                                    className={`w-full bg-slate-900/50 border text-center text-5xl tracking-[0.5em] font-mono py-6 rounded-2xl focus:outline-none transition-all placeholder:text-white/10 ${status === 'ERROR'
-                                        ? 'border-red-500/50 text-red-400'
-                                        : 'border-white/10 text-white focus:border-indigo-400/50 focus:ring-4 focus:ring-indigo-500/10'
-                                        }`}
-                                />
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs py-3 px-4 rounded-xl mb-6 text-center">
+                                {error}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSubmitRequest} className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-white/40 uppercase tracking-widest pl-1">Amount</label>
+                                <div className="relative">
+                                    <Banknote size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                                    <input
+                                        type="number"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        placeholder="₦ How much?"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-lg font-bold focus:border-indigo-500/50 focus:outline-none placeholder:text-white/10"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-white/40 uppercase tracking-widest pl-1">Bank Name</label>
+                                <div className="relative">
+                                    <Building2 size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                                    <select
+                                        value={bankName}
+                                        onChange={(e) => setBankName(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:border-indigo-500/50 focus:outline-none appearance-none cursor-pointer"
+                                    >
+                                        <option value="" className="bg-slate-900">Select Bank</option>
+                                        {NIGERIAN_BANKS.map(bank => (
+                                            <option key={bank.code} value={bank.name} className="bg-slate-900">{bank.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-white/40 uppercase tracking-widest pl-1">Account Number</label>
+                                <div className="relative">
+                                    <CreditCard size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                                    <input
+                                        type="text"
+                                        value={accountNumber}
+                                        onChange={(e) => setAccountNumber(e.target.value)}
+                                        placeholder="0000000000"
+                                        maxLength={10}
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-lg font-bold tracking-widest focus:border-indigo-500/50 focus:outline-none placeholder:text-white/10"
+                                    />
+                                </div>
                             </div>
 
                             <button
                                 type="submit"
-                                disabled={status === 'UNLOCKING' || passcode.length < 4}
-                                className="group w-full bg-white text-slate-950 font-bold py-4 rounded-2xl transition-all shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                                disabled={step === 'SUBMITTING'}
+                                className="w-full bg-white text-slate-950 font-bold py-5 rounded-2xl flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-indigo-500/10 mt-4 disabled:opacity-50"
                             >
-                                {status === 'UNLOCKING' ? (
-                                    <span className="flex items-center gap-2">
-                                        <Loader2 className="animate-spin" size={20} /> Verifying...
-                                    </span>
+                                {step === 'SUBMITTING' ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={20} /> Sending Request...
+                                    </>
                                 ) : (
                                     <>
-                                        Unlock Funds <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                                        Send Request <ArrowRight size={20} />
                                     </>
                                 )}
                             </button>
                         </form>
-
-                        {/* Security Badge */}
-                        <div className="mt-8 flex justify-center items-center gap-2 opacity-40">
-                            <Lock size={12} />
-                            <span className="text-[10px] uppercase tracking-widest font-bold">End-to-End Encrypted</span>
-                        </div>
                     </div>
                 )}
             </div>
-
-            {/* CSS for shake animation */}
-            <style>{`
-            @keyframes shake {
-                0%, 100% { transform: translateX(0); }
-                10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-                20%, 40%, 60%, 80% { transform: translateX(4px); }
-            }
-            .animate-shake {
-                animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
-            }
-        `}</style>
         </div>
     );
 };

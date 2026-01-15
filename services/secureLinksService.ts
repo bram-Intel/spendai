@@ -4,32 +4,22 @@ import { SecureLink } from '../types';
 export const secureLinksService = {
   /**
    * Create a new payment link
-   * @param amount Amount in kobo (e.g., 100000 = ₦1,000)
-   * @param passcode The 4-digit passcode
-   * @param description Optional description
    */
   async createLink(amount: number, passcode: string, description?: string): Promise<SecureLink> {
     const { data, error } = await (supabase as any).rpc('create_payment_link', {
-      p_amount: amount,
+      p_amount: amount * 100, // Handle kobo conversion if needed, though RPC does it? 
+      // Actually, let's keep it consistent. User inputs Naira.
       p_passcode: passcode,
       p_description: description || null,
     });
 
-    if (error) {
-      console.error('Error creating payment link:', error);
-      throw new Error(error.message || 'Failed to create payment link');
-    }
-
-    if (!data) {
-      throw new Error('No data returned from create_payment_link');
-    }
-
+    if (error) throw new Error(error.message);
     const response = data as any;
 
     return {
       id: response.link_id,
       link_code: response.link_code,
-      amount: response.amount / 100, // Convert kobo to naira for frontend
+      amount: response.amount / 100,
       description: description,
       status: response.status,
       createdAt: new Date().toISOString()
@@ -37,30 +27,55 @@ export const secureLinksService = {
   },
 
   /**
-   * Claim a payment link
-   * @param linkCode The 8-character link code
-   * @param passcode The 4-digit passcode
+   * Submit a payment request (Recipient/Brother uses this)
    */
-  async claimLink(linkCode: string, passcode: string): Promise<{ success: boolean; amount: number; message: string }> {
-    const { data, error } = await (supabase as any).rpc('claim_payment_link', {
+  async submitRequest(linkCode: string, passcode: string, amount: number, accountNumber: string, bankName: string): Promise<void> {
+    const { error } = await (supabase as any).rpc('submit_payment_request', {
       p_link_code: linkCode.toUpperCase(),
       p_passcode: passcode,
+      p_amount: amount * 100, // Convert to kobo
+      p_target_account_number: accountNumber,
+      p_target_bank_name: bankName
     });
 
-    if (error) {
-      console.error('Error claiming payment link:', error);
-      throw new Error(error.message || 'Failed to claim payment link');
-    }
+    if (error) throw new Error(error.message);
+  },
 
-    if (!data) {
-      throw new Error('No data returned from claim_payment_link');
-    }
+  /**
+   * Approve a pending request (Owner uses this)
+   */
+  async approveRequest(linkId: string, pin: string): Promise<void> {
+    const { error } = await (supabase as any).rpc('approve_payment_request', {
+      p_link_id: linkId,
+      p_pin: pin
+    });
 
-    const result = data as any;
-    return {
-      ...result,
-      amount: result.amount / 100 // Convert kobo to naira
-    };
+    if (error) throw new Error(error.message);
+  },
+
+  /**
+   * Fetch links created by user that are pending approval
+   */
+  async getPendingApprovals(): Promise<SecureLink[]> {
+    const { data, error } = await (supabase as any)
+      .from('secure_links')
+      .select('*')
+      .eq('status', 'pending_approval')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    return (data || []).map((link: any) => ({
+      id: link.id,
+      link_code: link.link_code,
+      amount: link.amount / 100,
+      requested_amount: link.requested_amount ? link.requested_amount / 100 : undefined,
+      target_account_number: link.target_account_number,
+      target_bank_name: link.target_bank_name,
+      description: link.description,
+      status: link.status,
+      createdAt: link.created_at
+    }));
   },
 
   /**
@@ -72,15 +87,13 @@ export const secureLinksService = {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching user links:', error);
-      throw new Error('Failed to fetch payment links');
-    }
+    if (error) throw new Error(error.message);
 
     return (data || []).map((link: any) => ({
       id: link.id,
       link_code: link.link_code,
       amount: link.amount / 100,
+      requested_amount: link.requested_amount ? link.requested_amount / 100 : undefined,
       description: link.description,
       status: link.status,
       createdAt: link.created_at,
@@ -89,19 +102,14 @@ export const secureLinksService = {
   },
 
   /**
-   * Cancel a payment link
-   * @param linkId The link ID
+   * Cancel a link
    */
   async cancelLink(linkId: string): Promise<void> {
     const { error } = await (supabase as any)
       .from('secure_links')
       .update({ status: 'cancelled' })
-      .eq('id', linkId)
-      .eq('status', 'active');
+      .eq('id', linkId);
 
-    if (error) {
-      console.error('Error cancelling payment link:', error);
-      throw new Error('Failed to cancel payment link');
-    }
+    if (error) throw new Error(error.message);
   },
 };

@@ -3,6 +3,7 @@ import { User, Transaction, ChatMessage, SecureLink } from '../types';
 import { Copy, ArrowUpRight, ArrowDownLeft, Send, Sparkles, Loader2, Link as LinkIcon, Lock, Eye, Wallet, CreditCard, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { geminiService } from '../services/geminiService';
+import { secureLinksService } from '../services/secureLinksService';
 
 interface DashboardProps {
     user: User;
@@ -37,29 +38,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
     // Import supabase at top (we'll add import in next step or assume it exists/we add it)
     // For now let's assume we pass supabase or import it. We should import it.
 
+    const [pendingLinks, setPendingLinks] = useState<SecureLink[]>([]);
+    const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+    const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
+    const [pin, setPin] = useState('');
+    const [isApproving, setIsApproving] = useState(false);
+
+    // Fetch pending links on mount
+    React.useEffect(() => {
+        fetchPending();
+    }, []);
+
+    const fetchPending = async () => {
+        try {
+            const data = await secureLinksService.getPendingApprovals();
+            setPendingLinks(data);
+        } catch (err) {
+            console.error('Failed to fetch pending requests', err);
+        }
+    };
+
     const handleCreateLink = async () => {
         if (!linkAmount || !linkCode) return;
 
         try {
-            const { data, error } = await (supabase as any).rpc('create_payment_link', {
-                p_amount: Number(linkAmount) * 100, // Convert to kobo
-                p_passcode: linkCode, // This is the 4-digit passcode
-                p_description: 'Secure Link Transfer'
-            });
-
-            if (error) {
-                console.error(error);
-                alert('Failed to create link: ' + error.message);
-                return;
-            }
-
-            const responseData = data as any;
-            onCreateLink(Number(linkAmount), responseData.link_code); // Update parent state if needed
+            const link = await secureLinksService.createLink(Number(linkAmount), linkCode, 'Spend Request Link');
+            onCreateLink(link.amount, link.link_code);
             setLinkCode('');
             setLinkAmount('');
-            // Maybe show success toast
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
+            alert('Failed to create link: ' + err.message);
+        }
+    };
+
+    const handleApprove = async () => {
+        if (!selectedLinkId || pin.length < 4) return;
+        setIsApproving(true);
+        try {
+            await secureLinksService.approveRequest(selectedLinkId, pin);
+            setIsPinModalOpen(false);
+            setPin('');
+            setSelectedLinkId(null);
+            fetchPending();
+            // Refresh balance
+            window.location.reload();
+        } catch (err: any) {
+            alert(err.message || 'Approval failed. Check your PIN.');
+        } finally {
+            setIsApproving(false);
         }
     };
 
@@ -202,6 +229,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                     </div>
                 </div>
 
+                {/* PENDING APPROVALS SECTION */}
+                {pendingLinks.length > 0 && (
+                    <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 animate-slide-up">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                                    <Sparkles size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-900">Incoming Requests</h3>
+                                    <p className="text-xs text-slate-500">Links waiting for your approval</p>
+                                </div>
+                            </div>
+                            <span className="bg-amber-100 text-amber-600 text-xs font-bold px-3 py-1 rounded-full">{pendingLinks.length} New</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {pendingLinks.map(link => (
+                                <div key={link.id} className="bg-slate-50 rounded-2xl p-5 border border-slate-100 flex flex-col justify-between group hover:border-brand-200 transition-all">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Requested Amount</p>
+                                            <p className="text-2xl font-bold text-slate-900 tracking-tight">₦{link.requested_amount?.toLocaleString()}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">To Bank</p>
+                                            <p className="text-sm font-bold text-slate-700">{link.target_bank_name}</p>
+                                        </div>
+                                    </div>
+                                    <div className="pt-4 border-t border-slate-200/50 flex gap-3">
+                                        <button
+                                            onClick={() => { setSelectedLinkId(link.id); setIsPinModalOpen(true); }}
+                                            className="flex-1 bg-brand-900 text-white py-3 rounded-xl text-sm font-bold hover:bg-black active:scale-95 transition-all shadow-lg"
+                                        >
+                                            Approve
+                                        </button>
+                                        <button className="px-4 bg-slate-200 text-slate-600 py-3 rounded-xl text-sm font-bold hover:bg-red-50 hover:text-red-600 transition-all">
+                                            Decline
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Account Details & Transactions Bento */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -327,6 +400,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                 </div>
             </div>
 
+            {/* PIN MODAL FOR APPROVAL */}
+            {isPinModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-slate-950/40 animate-fade-in">
+                    <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col items-center">
+                        <div className="w-16 h-16 bg-brand-50 rounded-2xl flex items-center justify-center text-brand-600 mb-6">
+                            <Lock size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900 mb-2 text-center">Enter PIN</h3>
+                        <p className="text-slate-500 text-sm mb-8 text-center px-4">Provide your transaction PIN to approve this payment request.</p>
+
+                        <div className="w-full mb-8">
+                            <input
+                                type="password"
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value)}
+                                maxLength={4}
+                                placeholder="••••"
+                                className="w-full bg-slate-50 border border-slate-200 text-center text-4xl tracking-[0.5em] font-mono py-5 rounded-2xl focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10 transition-all"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex flex-col w-full gap-3">
+                            <button
+                                onClick={handleApprove}
+                                disabled={pin.length < 4 || isApproving}
+                                className="w-full bg-brand-900 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {isApproving ? <Loader2 className="animate-spin" size={20} /> : 'Approve Payment'}
+                            </button>
+                            <button
+                                onClick={() => { setIsPinModalOpen(false); setPin(''); }}
+                                className="w-full text-slate-400 font-bold py-3 text-sm hover:text-slate-600 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

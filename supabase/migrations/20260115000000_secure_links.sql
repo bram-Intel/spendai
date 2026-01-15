@@ -56,8 +56,8 @@ CREATE POLICY "Users can update their own links"
 -- Function to create a payment link
 CREATE OR REPLACE FUNCTION public.create_payment_link(
     p_amount BIGINT,
-    p_passcode TEXT,
-    p_description TEXT DEFAULT NULL
+    p_description TEXT,
+    p_passcode TEXT
 )
 RETURNS JSON
 LANGUAGE plpgsql

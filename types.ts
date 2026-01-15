@@ -35,8 +35,11 @@ export interface SecureLink {
   id: string;
   link_code: string;
   amount: number;
+  requested_amount?: number;
+  target_account_number?: string;
+  target_bank_name?: string;
   description?: string;
-  status: 'active' | 'claimed' | 'expired' | 'cancelled';
+  status: 'active' | 'pending_approval' | 'approved' | 'rejected' | 'claimed' | 'expired' | 'cancelled';
   createdAt: string;
   expires_at?: string;
 }
