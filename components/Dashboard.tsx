@@ -163,13 +163,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                 };
                 setChatMessages(prev => [...prev, aiMsg]);
             } else {
-                throw new Error(result.error || 'Failed to get AI response');
+                throw new Error(result.details || result.error || 'Failed to get AI response');
             }
         } catch (err: any) {
             console.error('Chat error:', err);
             setChatMessages(prev => [...prev, {
                 role: 'model',
-                text: "I'm having trouble connecting right now. Please try again later.",
+                text: `I'm having trouble connecting. Error: ${err.message}`,
                 timestamp: new Date()
             }]);
         } finally {
