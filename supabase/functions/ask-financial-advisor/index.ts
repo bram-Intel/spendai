@@ -117,14 +117,15 @@ Guidelines:
 - Use Nigerian context (Naira currency, local financial practices)
 - Provide actionable advice
 - Be encouraging and supportive
+- Use real-time data where relevant (exchange rates, inflation, market trends) via internet search
 - If the user asks about features not related to their finances, politely redirect them
 - Never make up transaction data or balance information
 
 User's Question: ${prompt}`;
 
-    // Call Gemini API
+    // Call Gemini API with Google Search Grounding
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: {
@@ -136,9 +137,12 @@ User's Question: ${prompt}`;
               text: systemPrompt
             }]
           }],
+          tools: [{
+            google_search_retrieval: {}
+          }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 500,
+            maxOutputTokens: 1000,
           }
         }),
       }
