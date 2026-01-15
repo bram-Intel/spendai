@@ -64,27 +64,47 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const paystackResponse = await fetch(
-      `https://api.paystack.co/bank/resolve_bvn/${bvn}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${paystackSecretKey}`,
-          'Content-Type': 'application/json',
+    // Check if using test key (Paystack test API doesn't support BVN verification)
+    const isTestMode = paystackSecretKey.startsWith('sk_test_');
+    let paystackData;
+
+    if (isTestMode) {
+      // In test mode, return mock BVN data for any valid 11-digit BVN
+      console.log('Test mode: Bypassing Paystack API and returning mock data');
+      paystackData = {
+        status: true,
+        message: 'BVN resolved (test mode)',
+        data: {
+          first_name: 'Test',
+          last_name: 'User',
+          phone: '08012345678',
+          bvn: bvn,
         },
-      }
-    );
-
-    const paystackData = await paystackResponse.json();
-
-    if (!paystackResponse.ok || !paystackData.status) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'BVN verification failed', 
-          details: paystackData.message || 'Invalid BVN' 
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      };
+    } else {
+      // Production mode: Call actual Paystack API
+      const paystackResponse = await fetch(
+        `https://api.paystack.co/bank/resolve_bvn/${bvn}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${paystackSecretKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
       );
+
+      paystackData = await paystackResponse.json();
+
+      if (!paystackResponse.ok || !paystackData.status) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'BVN verification failed', 
+            details: paystackData.message || 'Invalid BVN' 
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // BVN is valid, update user profile
