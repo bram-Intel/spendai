@@ -67,34 +67,37 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fetch user's wallet and recent transactions
-    const { data: userData, error: dataError } = await supabase
-      .from('wallets')
-      .select('id, balance')
-      .eq('user_id', user.id)
-      .single();
+    let userData = null;
+    try {
+      const { data, error: dataError } = await supabase
+        .from('wallets')
+        .select('id, balance')
+        .eq('user_id', user.id)
+        .single();
 
-    if (dataError) {
-      console.error('Error fetching wallet:', dataError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch user data' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (dataError) {
+        console.warn('Wallet not found or access denied:', dataError);
+      } else {
+        userData = data;
+      }
+    } catch (e) {
+      console.warn('Exception fetching wallet:', e);
     }
 
     // Fetch detailed spending context
     let spendingSummary = null;
     let detailedHistory = [];
 
-    try {
-      const { data: summary, error: summaryError } = await supabase.rpc('get_ai_spending_summary', { p_wallet_id: userData.id });
-      if (!summaryError) spendingSummary = summary;
-      else console.error('RPC Error (summary):', summaryError);
+    if (userData) {
+      try {
+        const { data: summary, error: summaryError } = await supabase.rpc('get_ai_spending_summary', { p_wallet_id: userData.id });
+        if (!summaryError) spendingSummary = summary;
 
-      const { data: history, error: historyError } = await supabase.rpc('get_ai_detailed_history', { p_wallet_id: userData.id, p_limit: 20 });
-      if (!historyError) detailedHistory = history;
-      else console.error('RPC Error (history):', historyError);
-    } catch (e) {
-      console.error('Error calling context RPCs:', e);
+        const { data: history, error: historyError } = await supabase.rpc('get_ai_detailed_history', { p_wallet_id: userData.id, p_limit: 20 });
+        if (!historyError) detailedHistory = history;
+      } catch (e) {
+        console.warn('Error calling context RPCs:', e);
+      }
     }
 
     const historyText = detailedHistory && detailedHistory.length > 0
@@ -109,7 +112,7 @@ Deno.serve(async (req: Request) => {
       : 'No spending summary available';
 
     // Convert balance from kobo to naira
-    const balanceNaira = (userData.balance || 0) / 100;
+    const balanceNaira = userData ? (userData.balance || 0) / 100 : 0;
 
     const systemPrompt = `You are the AUTHORIZED AI TRANSACTION AGENT for Spend.AI (Nigeria).
 Your primary job is to help users manage money by PROPOSING ACTIONS directly in the app.
@@ -147,16 +150,18 @@ NIGERIAN BANKING CONTEXT:
 
 User's Input: ${prompt}`;
 
-    // Call Gemini API
+    console.log('Calling Gemini API for user:', user.id);
+
+    // Call Gemini API - Using v1 for better stability
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }],
           generationConfig: {
-            temperature: 0.1, // Very low for precision
+            temperature: 0.1,
             maxOutputTokens: 1000,
             response_mime_type: "application/json"
           }
@@ -166,12 +171,13 @@ User's Input: ${prompt}`;
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('Gemini API error:', errorText);
+      console.error('Gemini API error details:', errorText);
 
       return new Response(
         JSON.stringify({
           error: 'Failed to get response from AI advisor',
-          details: errorText
+          details: errorText,
+          status: geminiResponse.status
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -185,7 +191,7 @@ User's Input: ${prompt}`;
     try {
       resultJson = JSON.parse(resultText);
     } catch (e) {
-      console.error('Failed to parse Gemini response as JSON:', resultText);
+      console.error('Failed to parse Gemini response as JSON:', resultText, e);
       resultJson = { response: resultText, action: null };
     }
 
@@ -197,6 +203,7 @@ User's Input: ${prompt}`;
         action: resultJson.action,
         context: {
           balance: balanceNaira,
+          hasWallet: !!userData,
           historyCount: detailedHistory?.length || 0,
         }
       }),
@@ -204,9 +211,9 @@ User's Input: ${prompt}`;
     );
 
   } catch (error) {
-    console.error('Error in ask-financial-advisor function:', error);
+    console.error('CRITICAL Error in ask-financial-advisor:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      JSON.stringify({ error: 'Internal server error', details: error.message, stack: error.stack }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
