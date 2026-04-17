@@ -4,6 +4,7 @@ import { Copy, ArrowUpRight, ArrowDownLeft, Send, Sparkles, Loader2, Link as Lin
 import { supabase } from '../lib/supabase';
 import { geminiService } from '../services/geminiService';
 import { secureLinksService } from '../services/secureLinksService';
+import { transferService, TransferParams } from '../services/transferService';
 
 interface DashboardProps {
     user: User;
@@ -18,7 +19,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
         {
             role: 'model',
-            text: `Hello ${user.name.split(' ')[0]}! 🌟 I noticed you spent a bit more on Food this week. Want to set up a budget or generate a Secure Link for pocket money?`,
+            text: `Hello ${user.name.split(' ')[0]}! 🌟 I can help you send money, create secure links, or analyze your spending. Try saying "send 5k to 109343434 union bank" or "create a 10k link"!`,
             timestamp: new Date()
         }
     ]);
@@ -57,6 +58,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
     const [pin, setPin] = useState('');
     const [isApproving, setIsApproving] = useState(false);
     const [isLive, setIsLive] = useState(false);
+
+    // AI Transfer Confirmation State
+    const [pendingTransfer, setPendingTransfer] = useState<TransferParams | null>(null);
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [isExecutingTransfer, setIsExecutingTransfer] = useState(false);
+    const [transferPin, setTransferPin] = useState('');
 
     // Fetch pending links and setup real-time subscription
     React.useEffect(() => {
@@ -205,18 +212,62 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                 console.error('AI Link creation failed:', err);
             }
         } else if (action.type === 'INITIATE_TRANSFER') {
-            // Since Paystack is not LIVE, we simulation it by recording a transaction
-            // But first, we need the user to approve with PIN? 
-            // For now, let's just trigger a "Success" message and record it.
-            // In a real app, this would open a 'Review Transfer' modal.
+            // Show confirmation modal with extracted details
+            const transferParams: TransferParams = {
+                account_number: action.params.account_number,
+                bank_name: action.params.bank_name,
+                amount: action.params.amount,
+                account_name: action.params.account_name,
+                reason: action.params.reason || 'AI-initiated transfer'
+            };
 
-            // For the Demo, let's just show a success message as if it happened.
+            if (!transferParams.amount) {
+                // Amount not detected - ask user to specify
+                setChatMessages(prev => [...prev, {
+                    role: 'model',
+                    text: `I see you want to send money to ${transferParams.bank_name} (${transferParams.account_number}). How much would you like to send?`,
+                    timestamp: new Date()
+                }]);
+                return;
+            }
+
+            setPendingTransfer(transferParams);
+            setIsTransferModalOpen(true);
+        }
+    };
+
+    const handleConfirmTransfer = async () => {
+        if (!pendingTransfer || transferPin.length < 4) return;
+        
+        setIsExecutingTransfer(true);
+        try {
+            const result = await transferService.initiateTransfer(pendingTransfer);
+            
+            if (result.success) {
+                setChatMessages(prev => [...prev, {
+                    role: 'model',
+                    text: `✅ Transfer completed! ₦${pendingTransfer.amount.toLocaleString()} has been sent to ${pendingTransfer.account_name || pendingTransfer.account_number} at ${pendingTransfer.bank_name}. Your new balance is ₦${result.new_balance?.toLocaleString()}.`,
+                    timestamp: new Date()
+                }]);
+                onRefresh();
+            } else {
+                setChatMessages(prev => [...prev, {
+                    role: 'model',
+                    text: `❌ Transfer failed: ${result.error}. Please try again or check your balance.`,
+                    timestamp: new Date()
+                }]);
+            }
+        } catch (err: any) {
             setChatMessages(prev => [...prev, {
                 role: 'model',
-                text: `Transfer of ₦${action.params.amount?.toLocaleString()} to ${action.params.bank_name} (${action.params.account_number}) has been initiated simulation-style! In production, this would use Paystack.`,
+                text: `❌ Transfer failed: ${err.message || 'Unknown error'}`,
                 timestamp: new Date()
             }]);
-            onRefresh();
+        } finally {
+            setIsExecutingTransfer(false);
+            setIsTransferModalOpen(false);
+            setPendingTransfer(null);
+            setTransferPin('');
         }
     };
 
@@ -636,11 +687,80 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, transactions, active
                 </>
             )}
 
+            {/* AI Transfer Confirmation Modal */}
+            {isTransferModalOpen && pendingTransfer && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-slate-950/40 animate-fade-in">
+                    <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center text-white">
+                                <Send size={22} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-lg">Confirm Transfer</h3>
+                                <p className="text-slate-500 text-sm">AI detected transfer details</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 mb-6">
+                            <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 text-sm">Amount</span>
+                                    <span className="font-bold text-slate-900">₦{pendingTransfer.amount.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 text-sm">Bank</span>
+                                    <span className="font-medium text-slate-900 capitalize">{pendingTransfer.bank_name}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 text-sm">Account Number</span>
+                                    <span className="font-medium text-slate-900 font-mono">{pendingTransfer.account_number}</span>
+                                </div>
+                                {pendingTransfer.account_name && (
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500 text-sm">Account Name</span>
+                                        <span className="font-medium text-slate-900">{pendingTransfer.account_name}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-bold text-slate-700 mb-2 block">Enter PIN to Confirm</label>
+                                <input
+                                    type="password"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    value={transferPin}
+                                    onChange={(e) => setTransferPin(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="••••"
+                                    className="w-full text-center text-2xl tracking-[0.5em] font-bold bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-4 focus:outline-none focus:border-brand-500 focus:bg-white transition-all"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleConfirmTransfer}
+                                disabled={transferPin.length < 4 || isExecutingTransfer}
+                                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:from-indigo-500 hover:to-purple-500 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {isExecutingTransfer ? <Loader2 className="animate-spin" size={20} /> : `Send ₦${pendingTransfer.amount.toLocaleString()}`}
+                            </button>
+                            <button
+                                onClick={() => { setIsTransferModalOpen(false); setPendingTransfer(null); setTransferPin(''); }}
+                                className="w-full text-slate-400 font-bold py-3 text-sm hover:text-slate-600 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {isPinModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-slate-950/40 animate-fade-in">
                     <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col items-center">
-                        <div className="w-16 h-16 bg-brand-50 rounded-2xl flex items-center justify-center text-brand-600 mb-6">
-                            <Lock size={32} />
+                        <div className="w-16 h-16 bg-brand-50 rounded-2xl flex items-center justify-center text-brand-600 mb-6">                            <Lock size={32} />
                         </div>
                         <h3 className="text-xl font-bold text-slate-900 mb-2 text-center">Enter PIN</h3>
                         <p className="text-slate-500 text-sm mb-8 text-center px-4">Provide your transaction PIN to approve this payment request.</p>

@@ -125,28 +125,43 @@ ${historyText}
 
 YOUR MANDATE:
 1. **Be Agentic**: Do NOT say you cannot process transactions. You CAN propose them.
-2. **Action Intent Detection**: 
-   - If the user mentions an account number and bank (e.g., "Pay 5k to 123456 Zenith"), propose INITIATE_TRANSFER.
-   - If the user asks for a payment link (e.g., "Create a 5k link"), propose CREATE_LINK.
-3. **Conversational Analysis**: If they ask about spending, perform the analysis using the context.
+2. **Action Intent Detection - PARSE NATURAL LANGUAGE**:
+   - **INITIATE_TRANSFER**: Detect when user wants to send money. Examples:
+     * "send 5k to 109343434 union bank abraham okezie" → amount: 5000, account: 109343434, bank: union bank, name: abraham okezie
+     * "pay 10000 to gtbank 0011223344" → amount: 10000, account: 0011223344, bank: gtbank
+     * "transfer 2.5k to my sister's opay 8123456789" → amount: 2500, account: 8123456789, bank: opay
+     * "send money to zenith 0033445566 john doe" → amount: null (ask), account: 0033445566, bank: zenith, name: john doe
+   - **CREATE_LINK**: Detect payment link requests. Examples:
+     * "create a 5k link" → amount: 5000
+     * "generate link for 10000 naira" → amount: 10000
+3. **Amount Parsing Rules**:
+   - "5k" or "5K" → 5000
+   - "10k" or "10K" → 10000
+   - "2.5k" or "2.5K" → 2500
+   - "1k" or "1K" → 1000
+   - If amount is missing, set to null and ask user in response
+4. **Bank Name Normalization**: Extract bank name from phrases like "union bank", "gtbank", "zenith bank", "opay", "palmpay", "first bank", etc.
+5. **Account Number Extraction**: Find 10-digit numbers in the text.
+6. **Account Name Extraction**: Any additional names after bank/account details.
 
 OUTPUT SCHEMA (STRICT JSON):
 You must ALWAYS respond with this JSON structure:
 {
-  "response": "Your concise, friendly Nigerian-style confirmation message...",
+  "response": "Your concise, friendly Nigerian-style confirmation message... If amount is missing, ask for it. If details are unclear, ask for clarification.",
   "action": null | {
     "type": "CREATE_LINK" | "INITIATE_TRANSFER",
     "params": {
-       // CREATE_LINK: amount (number), description (string)
-       // INITIATE_TRANSFER: account_number (string), bank_name (string), amount (number), account_name (string, if detected)
+       // CREATE_LINK: amount (number, required), description (string, optional)
+       // INITIATE_TRANSFER: account_number (string, 10 digits), bank_name (string), amount (number, null if not found), account_name (string, optional)
     }
   }
 }
 
 NIGERIAN BANKING CONTEXT:
-- OPay, PalmPay, Moniepoint are common.
-- Account numbers are 10 digits.
-- Propose the transfer IMMEDIATELY if you see the bank details.
+- OPay, PalmPay, Moniepoint, Kuda are digital banks.
+- Account numbers are 10 digits (9 digits for some fintechs like OPay).
+- Common banks: Access, GTBank, Zenith, First Bank, UBA, Union Bank, Fidelity, Ecobank, Sterling, Wema, Polaris, Keystone.
+- Propose the transfer IMMEDIATELY if you detect clear intent with sufficient details.
 
 User's Input: ${prompt}`;
 
